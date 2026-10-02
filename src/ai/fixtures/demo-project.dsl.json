@@ -1,0 +1,150 @@
+{
+  "dslVersion": "0.1",
+  "project": {
+    "id": "delyai2-phase0-demo",
+    "title": "DeLyAI2 — Video Engine Phase 0",
+    "language": "vi"
+  },
+  "render": {
+    "fps": 30,
+    "width": 1920,
+    "height": 1080
+  },
+  "style": {
+    "styleId": "default"
+  },
+  "seed": 20261003,
+  "voiceScenePolicy": "strict",
+  "music": null,
+  "scenes": [
+    {
+      "schemaVersion": "0.1",
+      "sceneId": "scene-hero",
+      "purpose": "hook",
+      "duration": 6,
+      "composition": "hero",
+      "visual": [],
+      "motion": [],
+      "typography": {
+        "text": "DeLyAI2",
+        "animation": "reveal",
+        "slot": "main",
+        "startSeconds": 0.4,
+        "durationSeconds": 5
+      },
+      "audio": [],
+      "events": [],
+      "style": {
+        "styleId": "default"
+      },
+      "seed": 20261003
+    },
+    {
+      "schemaVersion": "0.1",
+      "sceneId": "scene-split",
+      "purpose": "explain_concept",
+      "duration": 9,
+      "composition": "split",
+      "visual": [
+        {
+          "id": "split-particles",
+          "recipe": "particle-field",
+          "params": {
+            "count": 48,
+            "hue": 200,
+            "speed": 1
+          },
+          "slot": "aside"
+        }
+      ],
+      "motion": [
+        {
+          "recipe": "slide",
+          "target": "split-particles",
+          "params": {
+            "axis": "x",
+            "distance": 0.08,
+            "easing": "out"
+          }
+        }
+      ],
+      "typography": {
+        "text": "AI mô tả ý định",
+        "animation": "fade",
+        "slot": "main",
+        "startSeconds": 1,
+        "durationSeconds": 4
+      },
+      "audio": [],
+      "events": [],
+      "style": {
+        "styleId": "default"
+      },
+      "seed": 20261003
+    },
+    {
+      "schemaVersion": "0.1",
+      "sceneId": "scene-network",
+      "purpose": "explain_network",
+      "duration": 9,
+      "composition": "full-screen",
+      "visual": [
+        {
+          "id": "network",
+          "recipe": "network-graph",
+          "params": {
+            "nodes": 28,
+            "radius": 2.6,
+            "color": "#4a9eff"
+          },
+          "slot": "main"
+        }
+      ],
+      "motion": [
+        {
+          "recipe": "camera-flythrough",
+          "target": "network",
+          "params": {
+            "from": 0.9,
+            "to": 1.05
+          }
+        }
+      ],
+      "typography": {
+        "text": "Một master timeline",
+        "animation": "word-by-word",
+        "slot": "main",
+        "startSeconds": 0.6,
+        "durationSeconds": 4
+      },
+      "audio": [],
+      "events": [],
+      "style": {
+        "styleId": "default"
+      },
+      "seed": 20261003
+    },
+    {
+      "schemaVersion": "0.1",
+      "sceneId": "scene-outro",
+      "purpose": "outro",
+      "duration": 6,
+      "composition": "centered",
+      "visual": [],
+      "motion": [],
+      "typography": {
+        "text": "Phase 1",
+        "animation": "typewriter",
+        "slot": "main",
+        "startSeconds": 0.8,
+        "durationSeconds": 3
+      },
+      "audio": [],
+      "events": [],
+      "style": {
+        "styleId": "default"
+      },
+      "seed": 20261003
+    }
+  ]
+}

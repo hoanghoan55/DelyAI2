@@ -31,4 +31,10 @@ export default tseslint.config(
       ],
     },
   },
+  {
+    // The composition root breaks the ai → video-engine rule deliberately (spec §2).
+    // State the exception explicitly rather than relying on the `ignores` above.
+    files: ['src/ai/project.ts'],
+    rules: { 'no-restricted-imports': 'off' },
+  },
 )
