@@ -1,6 +1,9 @@
 import tseslint from 'typescript-eslint'
 
 export default tseslint.config(
+  // Build output and dependencies are never linted. `dist/` exists after
+  // `vite build`, so this must be ignored or CI's build → lint order goes red.
+  { ignores: ['dist/**', 'node_modules/**', 'out/**'] },
   ...tseslint.configs.recommended,
   {
     files: ['src/video-engine/**/*.{ts,tsx}'],
