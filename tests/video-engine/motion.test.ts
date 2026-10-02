@@ -1,9 +1,11 @@
 import { describe, it, expect, beforeEach } from 'vitest'
+import { z } from 'zod'
 import { clearRegistry, clearRendererBackends, resolveMotion } from '@/video-engine/registry'
-import { registerMotionRecipes, getMotionRecipe, MOTION_RECIPES, applyMotion, composeTransforms, IDENTITY_TRANSFORM } from '@/video-engine/motion'
+import { registerMotionRecipes, registerMotionRecipeImpl, getMotionRecipe, MOTION_RECIPES, applyMotion, composeTransforms, IDENTITY_TRANSFORM } from '@/video-engine/motion'
 import { clearRegistered, registerBackends } from '@/video-engine/runtime'
 import { canonicalize } from '@/shared'
 import type { CompiledLayer } from '@/video-engine/ir'
+import type { MotionRecipeImpl } from '@/video-engine/motion'
 
 beforeEach(() => { clearRegistry(); clearRendererBackends(); registerMotionRecipes() })
 
@@ -25,7 +27,9 @@ describe('motion recipes', () => {
     expect(composeTransforms(a, b)).toEqual({ opacity: 0.25, x: 15, y: -3, scale: 1, rotate: 45 })
   })
   it('applyMotion is a pure function of the frame', () => {
-    const l = layer([{ recipeId: 'fade', recipeVersion: '1.0.0', frameWindow: { from: 0, durationInFrames: 30 }, params: {} }])
+    // A compiled layer carries the recipe schema's *parsed output*, so the fade
+    // motion's params are its schema defaults, already resolved by the compiler.
+    const l = layer([{ recipeId: 'fade', recipeVersion: '1.0.0', frameWindow: { from: 0, durationInFrames: 30 }, params: { from: 0, to: 1 } }])
     expect(applyMotion(l, 0, 30)).toEqual(applyMotion(l, 0, 30))
     expect(applyMotion(l, 0, 30).opacity).toBeCloseTo(0, 5)
     expect(applyMotion(l, 30, 30).opacity).toBeCloseTo(1, 5)
@@ -34,12 +38,46 @@ describe('motion recipes', () => {
     expect(applyMotion(layer([]), 12, 30)).toEqual(IDENTITY_TRANSFORM)
   })
   it('clamps outside the motion window', () => {
-    const l = layer([{ recipeId: 'slide', recipeVersion: '1.0.0', frameWindow: { from: 10, durationInFrames: 20 }, params: { axis: 'x', distance: 0.25 } }])
+    // Compiled slide params always carry all three schema fields (every field
+    // has a `.default(...)`), so the layer supplies the resolved `easing` too.
+    const l = layer([{ recipeId: 'slide', recipeVersion: '1.0.0', frameWindow: { from: 10, durationInFrames: 20 }, params: { axis: 'x', distance: 0.25, easing: 'out' } }])
     expect(applyMotion(l, 0, 30).x).toBe(applyMotion(l, 10, 30).x)
     expect(applyMotion(l, 999, 30).x).toBe(applyMotion(l, 29, 30).x)
   })
   it('fade recipe default params parse', () => {
     expect(getMotionRecipe('fade').paramsSchema.parse({})).toMatchObject({ from: 0, to: 1 })
+  })
+})
+
+// Compiler/runtime boundary (spec line 210, ir/types.ts): `motion.params` is
+// compiler output — validated, defaulted, normalized — and `applyMotion`
+// resolves nothing. It must pass the layer's params to the recipe verbatim,
+// never re-parse them (a `parse` would strip unknown keys and re-resolve
+// defaults, i.e. the runtime resolving defaults, which the spec forbids).
+describe('applyMotion passes compiled params to the recipe verbatim', () => {
+  it('hands motion.params through untouched — no re-parse, no default resolution', () => {
+    const received: Array<Record<string, unknown>> = []
+    const spy: MotionRecipeImpl = {
+      id: 'spy', version: '1.0.0',
+      // A plain `z.object` strips unknown keys on parse; a verbatim pass-through
+      // delivers the object as-is, `extra` intact.
+      paramsSchema: z.object({ from: z.number().default(0) }),
+      apply: ({ params }) => {
+        received.push(params as unknown as Record<string, unknown>)
+        return IDENTITY_TRANSFORM
+      },
+    }
+    registerMotionRecipeImpl(spy)
+
+    // A deliberate superset: only meaningful if the runtime forwards it verbatim.
+    const compiledParams = { from: 0.3, extra: 'kept' }
+    const l = layer([{ recipeId: 'spy', recipeVersion: '1.0.0', frameWindow: { from: 0, durationInFrames: 30 }, params: compiledParams }])
+    applyMotion(l, 0, 30)
+
+    expect(received).toHaveLength(1)
+    // Identity proves no copy/re-parse; the extra field proves no `parse` ran.
+    expect(received[0]).toBe(compiledParams)
+    expect(received[0]).toEqual({ from: 0.3, extra: 'kept' })
   })
 })
 

@@ -6,6 +6,10 @@ import { composeTransforms, IDENTITY_TRANSFORM, type LayerTransform } from './ty
  * Resolves all motion windows on a layer at an absolute frame. Pure: the same
  * (layer, frame, fps) always yields the same transform. Windows outside their
  * range contribute nothing because each recipe clamps its own interpolation.
+ *
+ * `applyMotion` resolves nothing: `motion.params` is compiler output (already
+ * validated, defaulted, and normalized), so it is handed to the recipe
+ * verbatim. The runtime must never re-resolve a default — see ir/types.ts.
  */
 export function applyMotion(layer: CompiledLayer, absoluteFrame: number, fps: number): LayerTransform {
   let out: LayerTransform = IDENTITY_TRANSFORM
@@ -15,12 +19,7 @@ export function applyMotion(layer: CompiledLayer, absoluteFrame: number, fps: nu
     out = composeTransforms(out, recipe.apply({
       frame, fps,
       durationInFrames: Math.max(1, motion.frameWindow.durationInFrames - 1),
-      // Resolve the recipe's own schema defaults so a layer built with partial or
-      // empty motion params is still valid. Compiler output is already fully
-      // resolved, and schema.parse is idempotent, so this is an identity for real
-      // scenes and only changes hand-built (test) layers. Never resolve visual
-      // layer params this way — that is the compiler's job (ir/types.ts).
-      params: recipe.paramsSchema.parse(motion.params),
+      params: motion.params as never,
     }))
   }
   return out
