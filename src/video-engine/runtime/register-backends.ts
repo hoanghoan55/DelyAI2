@@ -1,5 +1,6 @@
 import { clearRegistry, clearRendererBackends, registerRendererBackend } from '@/video-engine/registry'
 import { registerMetadata } from '@/video-engine/registry/register'
+import { registerCanvasRecipes, clearCanvasRecipes, Canvas2DBackend } from '@/video-engine/canvas'
 import { DomBackend } from './DomBackend'
 
 /**
@@ -10,6 +11,7 @@ import { DomBackend } from './DomBackend'
 export function clearRegistered(): void {
   clearRegistry()
   clearRendererBackends()
+  clearCanvasRecipes()
 }
 
 /**
@@ -19,5 +21,7 @@ export function clearRegistered(): void {
  */
 export function registerBackends(): void {
   registerMetadata()
+  registerCanvasRecipes()
   registerRendererBackend('dom', DomBackend as unknown as (p: unknown) => unknown)
+  registerRendererBackend('canvas2d', Canvas2DBackend as unknown as (p: unknown) => unknown)
 }
