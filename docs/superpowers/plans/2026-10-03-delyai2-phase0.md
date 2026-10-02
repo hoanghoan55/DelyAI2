@@ -3195,7 +3195,7 @@ describe('motion recipes', () => {
     expect(composeTransforms(a, b)).toEqual({ opacity: 0.25, x: 15, y: -3, scale: 1, rotate: 45 })
   })
   it('applyMotion is a pure function of the frame', () => {
-    const l = layer([{ recipeId: 'fade', recipeVersion: '1.0.0', frameWindow: { from: 0, durationInFrames: 30 }, params: {} }])
+    const l = layer([{ recipeId: 'fade', recipeVersion: '1.0.0', frameWindow: { from: 0, durationInFrames: 30 }, params: { from: 0, to: 1 } }])
     expect(applyMotion(l, 0, 30)).toEqual(applyMotion(l, 0, 30))
     expect(applyMotion(l, 0, 30).opacity).toBeCloseTo(0, 5)
     expect(applyMotion(l, 30, 30).opacity).toBeCloseTo(1, 5)
@@ -3204,15 +3204,34 @@ describe('motion recipes', () => {
     expect(applyMotion(layer([]), 12, 30)).toEqual(IDENTITY_TRANSFORM)
   })
   it('clamps outside the motion window', () => {
-    const l = layer([{ recipeId: 'slide', recipeVersion: '1.0.0', frameWindow: { from: 10, durationInFrames: 20 }, params: { axis: 'x', distance: 0.25 } }])
+    const l = layer([{ recipeId: 'slide', recipeVersion: '1.0.0', frameWindow: { from: 10, durationInFrames: 20 }, params: { axis: 'x', distance: 0.25, easing: 'out' } }])
     expect(applyMotion(l, 0, 30).x).toBe(applyMotion(l, 10, 30).x)
     expect(applyMotion(l, 999, 30).x).toBe(applyMotion(l, 29, 30).x)
   })
   it('fade recipe default params parse', () => {
     expect(getMotionRecipe('fade').paramsSchema.parse({})).toMatchObject({ from: 0, to: 1 })
   })
+  it('applyMotion passes compiled params to the recipe verbatim', () => {
+    // The compiler resolves defaults/validation; the runtime resolves nothing.
+    // A re-parse here would strip an unknown key, so a superset proves pass-through.
+    const seen: JsonObject[] = []
+    registerMotionRecipeImpl({
+      id: 'spy-motion', version: '1.0.0',
+      paramsSchema: z.object({ from: z.number().default(0) }),
+      apply: (a) => { seen.push(a.params); return IDENTITY_TRANSFORM },
+    })
+    const compiledParams: JsonObject = { from: 0.3, extra: 'kept' }
+    applyMotion(
+      layer([{ recipeId: 'spy-motion', recipeVersion: '1.0.0', frameWindow: { from: 0, durationInFrames: 30 }, params: compiledParams }]),
+      0, 30,
+    )
+    expect(seen[0]).toBe(compiledParams)
+    expect(seen[0]).toEqual({ from: 0.3, extra: 'kept' })
+  })
 })
 ```
+
+> **Boundary note:** `applyMotion` is a pure transform evaluator — it looks the recipe up, computes the layer-local frame, and composes. It does **not** re-parse or re-resolve `motion.params`: the compiler already did `validate → default → normalize` (spec §"`ResolvedParams = JsonObject`"), so a compiled layer's `motion.params` is always a recipe schema's *parsed output*. The tests above therefore build hand-made layers with fully-resolved params, exactly as the compiler emits them.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
