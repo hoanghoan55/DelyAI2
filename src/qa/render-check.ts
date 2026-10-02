@@ -9,10 +9,21 @@ import { hasRendererBackend } from '@/video-engine/registry'
  *
  * Uses the non-throwing `hasRendererBackend` probe, so a missing backend is
  * reported as a diagnostic rather than thrown.
+ *
+ * Total: a missing/`null` layer list or a `null` layer entry is skipped/reported
+ * rather than throwing.
  */
 export function checkRender(layers: CompiledLayer[]): Diagnostic[] {
   const diagnostics: Diagnostic[] = []
-  for (const layer of layers) {
+  for (const layer of layers ?? []) {
+    if (!layer) {
+      diagnostics.push({
+        severity: 'error',
+        code: 'QA_INVALID_LAYER',
+        message: 'Encountered a null or missing layer entry.',
+      })
+      continue
+    }
     if (!hasRendererBackend(layer.renderer)) {
       diagnostics.push({
         severity: 'error',
