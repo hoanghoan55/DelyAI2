@@ -473,6 +473,9 @@ function writeNumber(n: number): string {
 - [ ] **Step 5: Implement `src/shared/hash.ts` (pure JS SHA-256, isomorphic)**
 
 ```ts
+// src/shared/hash.ts
+import { canonicalize } from './canonical-json'
+
 // Dependency-free SHA-256. Works in Node and in Remotion's render bundle
 // (Chromium), where node:crypto is unavailable.
 const K = new Uint32Array([
@@ -531,6 +534,11 @@ export function sha256Hex(input: string): string {
 function rotr(x: number, n: number): number {
   return ((x >>> n) | (x << (32 - n))) >>> 0
 }
+
+/** Hash any value using canonical JSON so key order cannot change the result. */
+export function hashObject(value: unknown): string {
+  return sha256Hex(canonicalize(value))
+}
 ```
 
 - [ ] **Step 6: Implement `src/shared/ids.ts` and `src/shared/index.ts`**
@@ -544,19 +552,13 @@ export function makeId(prefix: string, index: number): string {
 
 ```ts
 // src/shared/index.ts
-import { canonicalize } from './canonical-json'
-import { sha256Hex } from './hash'
-
 export * from './rng'
 export * from './ids'
 export { canonicalize } from './canonical-json'
-export { sha256Hex } from './hash'
-
-/** Hash any value using canonical JSON so key order cannot change the result. */
-export function hashObject(value: unknown): string {
-  return sha256Hex(canonicalize(value))
-}
+export { sha256Hex, hashObject } from './hash'
 ```
+
+> **`hashObject` lives in `hash.ts`, not `index.ts`.** It is defined beside `sha256Hex` because it is the same concern (hashing) and because the test imports it from `@/shared/hash`. `index.ts` only re-exports it. Consumers import it either way: `@/shared/hash` (the test) and `@/shared` (the barrel, used by Tasks 5, 7, and 10).
 
 - [ ] **Step 7: Run tests to verify they pass**
 
