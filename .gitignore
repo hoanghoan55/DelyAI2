@@ -1,0 +1,7 @@
+node_modules/
+dist/
+out/
+.codegraph/
+*.mp4
+*.log
+.DS_Store
