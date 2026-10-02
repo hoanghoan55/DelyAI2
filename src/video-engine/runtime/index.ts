@@ -1,5 +1,6 @@
 export { SceneRenderer } from './SceneRenderer'
 export { LayerRenderer } from './LayerRenderer'
+export { MotionLayer } from './MotionLayer'
 export { TypographyLayer } from './TypographyLayer'
 export { DomBackend } from './DomBackend'
 export { ProjectVideo } from './ProjectVideo'

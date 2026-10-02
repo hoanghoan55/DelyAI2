@@ -3,6 +3,7 @@ import { AbsoluteFill, useCurrentFrame } from 'remotion'
 import { resolveComposition } from '@/video-engine/registry'
 import type { CompiledScene } from '@/video-engine/ir'
 import { LayerRenderer } from './LayerRenderer'
+import { MotionLayer } from './MotionLayer'
 import { TypographyLayer } from './TypographyLayer'
 import { absoluteFrameOf, layerLocalFrame } from './frame-math'
 
@@ -21,7 +22,9 @@ export const SceneRenderer: React.FC<{ scene: CompiledScene }> = ({ scene }) => 
         const absoluteFrame = absoluteFrameOf(scene.timing, localFrame)
         return (
           <AbsoluteFill key={layer.id} style={{ left: rect.x, top: rect.y, width: rect.width, height: rect.height, overflow: 'hidden' }}>
-            <LayerRenderer layer={layer} absoluteFrame={absoluteFrame} render={scene.render} seed={scene.seed} />
+            <MotionLayer layer={layer} absoluteFrame={absoluteFrame} render={scene.render}>
+              <LayerRenderer layer={layer} absoluteFrame={absoluteFrame} render={scene.render} seed={scene.seed} />
+            </MotionLayer>
           </AbsoluteFill>
         )
       })}
