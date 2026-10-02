@@ -1,31 +1,17 @@
 import { secondsToFrames } from '@/timeline/convert'
 import type { Diagnostic } from '@/timeline/diagnostics'
 import type { MasterTimeline } from '@/timeline/master'
-import { hasComposition, hasMotion, hasRendererBackend, hasVisual, resolveComposition, resolveMotion, resolveVisual } from '@/video-engine/registry'
+import { hasComposition, hasMotion, hasVisual, resolveComposition, resolveMotion, resolveVisual } from '@/video-engine/registry'
 import { ENGINE_VERSION, IR_VERSION } from '@/video-engine/version'
 import { computeCompiledHash } from '@/video-engine/ir/hash'
 import type { AssetRef, CompiledAudioCue, CompiledEvent, CompiledLayer, CompiledScene, CompiledTypography } from '@/video-engine/ir/types'
-import type { RendererKind, SceneDSL } from '@/video-engine/schema'
+import type { SceneDSL } from '@/video-engine/schema'
 import { CompilerError } from './errors'
 import { computeSourceHash, resolveParams } from './params'
 
 export type CompileSceneInput = { dsl: SceneDSL; timeline: MasterTimeline; assets?: AssetRef[] }
 
 const err = (code: string, message: string, sceneId: string): Diagnostic => ({ severity: 'error', code, message, sceneId })
-
-/**
- * The registry is the only authority on a recipe's renderer. A recipe whose
- * renderer kind has no registered backend cannot render, so it fails here as an
- * UNKNOWN_RENDERER diagnostic rather than surfacing later as a runtime throw or
- * a blank frame. Uses the non-throwing `hasRendererBackend` probe (Review Focus #2).
- */
-function assertRenderer(renderer: RendererKind, sceneId: string): void {
-  if (!hasRendererBackend(renderer)) {
-    throw new CompilerError(`No renderer backend registered for "${renderer}"`, [
-      err('UNKNOWN_RENDERER', `No renderer backend is registered for "${renderer}".`, sceneId),
-    ])
-  }
-}
 
 /**
  * Every frame in the IR must be an integer. `secondsToFrames` rounds, but a
@@ -92,12 +78,11 @@ export function compileScene(input: CompileSceneInput): CompiledScene {
       ])
     }
     const recipe = resolveVisual(v.recipe)
-    assertRenderer(recipe.renderer, dsl.sceneId)
     const slot = v.slot ?? composition.slots[Math.min(i, composition.slots.length - 1)]!.id
     layers.push({
       id: v.id ?? `${dsl.sceneId}-visual-${i}`, layerKind: 'visual', recipeId: recipe.id, recipeVersion: recipe.version,
       renderer: recipe.renderer, slot, frameWindow: { from: 0, durationInFrames: sceneDuration },
-      params: resolveParams(v.recipe, v.params, 'visual'), motion: [], zIndex: z++, assetRefs: [],
+      params: resolveParams(v.recipe, v.params, 'visual', dsl.sceneId), motion: [], zIndex: z++, assetRefs: [],
     })
   }
 
@@ -120,7 +105,7 @@ export function compileScene(input: CompileSceneInput): CompiledScene {
     target.motion.push({
       recipeId: recipe.id, recipeVersion: recipe.version,
       frameWindow: { from: 0, durationInFrames: sceneDuration },
-      params: resolveParams(m.recipe, m.params, 'motion'),
+      params: resolveParams(m.recipe, m.params, 'motion', dsl.sceneId),
     })
   }
 

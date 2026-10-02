@@ -1,13 +1,25 @@
 import { hashObject } from '@/shared'
+import type { Diagnostic } from '@/timeline/diagnostics'
 import { resolveVisual, resolveMotion } from '@/video-engine/registry'
 import type { JsonObject, SceneDSL } from '@/video-engine/schema'
 import type { AssetRef } from '@/video-engine/ir'
+import { CompilerError } from './errors'
+
+const err = (code: string, message: string, sceneId?: string): Diagnostic => {
+  const diagnostic: Diagnostic = { severity: 'error', code, message }
+  if (sceneId !== undefined) diagnostic.sceneId = sceneId
+  return diagnostic
+}
 
 /** Validate raw DSL params and fill registry defaults. Runtime never does this. */
-export function resolveParams(recipeId: string, raw: JsonObject, kind: 'visual' | 'motion' = 'visual'): JsonObject {
+export function resolveParams(recipeId: string, raw: JsonObject, kind: 'visual' | 'motion' = 'visual', sceneId?: string): JsonObject {
   const recipe = kind === 'visual' ? resolveVisual(recipeId) : resolveMotion(recipeId)
   const parsed = recipe.paramsSchema.safeParse(raw)
-  if (!parsed.success) throw new Error(`Invalid params for ${kind} recipe "${recipeId}": ${parsed.error.message}`)
+  if (!parsed.success) {
+    throw new CompilerError(`Invalid params for ${kind} recipe "${recipeId}"`, [
+      err('INVALID_PARAMS', `Invalid params for ${kind} recipe "${recipeId}": ${parsed.error.message}`, sceneId),
+    ])
+  }
   return parsed.data as JsonObject
 }
 

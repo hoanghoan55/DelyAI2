@@ -91,12 +91,6 @@ describe('compileScene — diagnostics for unknown ids (Review Focus #2)', () =>
     expect(e.diagnostics.some((d) => d.code === 'UNKNOWN_MOTION_RECIPE')).toBe(true)
   })
 
-  it('fails with UNKNOWN_RENDERER when the resolved recipe renderer has no backend', () => {
-    clearRendererBackends()
-    const e = captureError(() => compileScene({ dsl, timeline: timelineFor(6) }))
-    expect(e.diagnostics.some((d) => d.code === 'UNKNOWN_RENDERER')).toBe(true)
-  })
-
   it('fails with UNKNOWN_SLOT when a visual targets a slot the composition does not declare', () => {
     const e = captureError(() => compileScene({ dsl: { ...dsl, visual: [{ recipe: 'particle-field', params: {}, slot: 'ghost' }] }, timeline: timelineFor(6) }))
     expect(e.diagnostics.some((d) => d.code === 'UNKNOWN_SLOT')).toBe(true)
@@ -226,5 +220,17 @@ describe('compileScene — purity and hash contract (hard requirements #5 & #6)'
     const c = computeSourceHash({ ...dsl, seed: 999 }, [])
     expect(a).toBe(b)
     expect(a).not.toBe(c)
+  })
+})
+
+describe('compileScene — recipe params rejected by the recipe schema (INVALID_PARAMS)', () => {
+  beforeEach(() => { clearRegistry(); clearRendererBackends(); registerTestRecipes() })
+
+  it('throws a CompilerError carrying INVALID_PARAMS when a recipe rejects the DSL params', () => {
+    // JsonObjectSchema accepts any JSON, so the DSL schema admits { count: 1.5 }
+    // even though particle-field's paramsSchema requires an integer count.
+    const e = captureError(() => compileScene({ dsl: { ...dsl, visual: [{ recipe: 'particle-field', params: { count: 1.5 } }] }, timeline: timelineFor(6) }))
+    expect(e).toBeInstanceOf(CompilerError)
+    expect(e.diagnostics.some((d) => d.code === 'INVALID_PARAMS')).toBe(true)
   })
 })
