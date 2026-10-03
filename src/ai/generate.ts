@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { Brief, StoryDirector, StoryPlan } from './story/contract'
+import type { Brief, StoryDirector, StoryPlan, StorySceneOutline } from './story/contract'
 import type { VisualDirector } from './visual/contract'
 import type { TtsAdapter } from './tts/contract'
 import type { VoiceTimeline } from '@/timeline/voice'
@@ -69,6 +69,9 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
   const dir = path.join(repoRoot, 'generated', runId)
   fs.mkdirSync(dir, { recursive: true })
 
+  // ---- manifest (read first: it is the brief-identity fallback — R26) ----
+  let manifest = readManifest(dir)
+
   // ---- brief artifact (identity of the run) ------------------------------
   const bHash = briefHash(brief)
   const briefPath = path.join(dir, 'brief.json')
@@ -77,12 +80,17 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
     if (JSON.stringify(existingBrief.payload) !== JSON.stringify(brief)) {
       throw new StageError('story', `BRIEF_MISMATCH: run "${runId}" belongs to a different brief`)
     }
+  } else if (manifest && manifest.briefHash !== bHash) {
+    // Corrupt/missing brief.json with an existing manifest (R26): the manifest's
+    // hash is the identity of record. Hash comparison — order-independent — so a
+    // different brief on the same runId can never silently overwrite it.
+    throw new StageError('story', `BRIEF_MISMATCH: run "${runId}" belongs to a different brief`)
   } else {
+    // True first run, or self-heal after corruption: (re)write the artifact.
     writeJsonArtifact(briefPath, { schemaVersion: 'brief-1', runId, sourceHash: bHash }, brief)
   }
 
-  // ---- manifest ----------------------------------------------------------
-  let manifest = readManifest(dir)
+  // ---- manifest creation (first run only) --------------------------------
   if (!manifest) {
     manifest = createManifest({
       runId, brief, briefHash: bHash,
@@ -198,17 +206,25 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
 
   // ---- ③ retime + ④ master timeline --------------------------------------
   const padding = manifest.retime.paddingSeconds
-  const retimed = retimeScenes(story.scenes, voice, padding)
   const timelineInputs = { paddingSeconds: padding, fps: RENDER_DEFAULTS.fps, width: RENDER_DEFAULTS.width, height: RENDER_DEFAULTS.height, voiceScenePolicy: 'strict' }
   const timelineValid = stageInputsOf('timeline') ? validateTimeline(dir, upstream, manifest) : { ok: false as const, reason: 'never ran' }
   let timeline: MasterTimeline
+  // Outer scope so the visual stage can consume it when the timeline was skipped.
+  let retimed: StorySceneOutline[]
   if (timelineValid.ok) {
     timeline = readJsonArtifact<MasterTimeline>(path.join(dir, 'master-timeline.json'))!.payload
+    // Skip-path retime: the chain pins story+voice to the exact payload that the
+    // run which wrote this artifact already retimed successfully (retime is pure),
+    // so it cannot throw here — the throwing path is the run branch's try below.
+    retimed = retimeScenes(story.scenes, voice, padding)
     upstream = timelineValid.sourceHash
     progress({ stage: 'timeline', status: 'skip' })
   } else {
     progress({ stage: 'timeline', status: 'start', detail: timelineValid.reason })
     try {
+      // R27: retime lives INSIDE the try — a RetimeError must funnel through
+      // failStage('timeline', …) (progress + manifest + StageError), not escape.
+      retimed = retimeScenes(story.scenes, voice, padding)
       timeline = buildMasterTimeline({
         fps: RENDER_DEFAULTS.fps, width: RENDER_DEFAULTS.width, height: RENDER_DEFAULTS.height,
         scenes: retimed.map((s) => ({ sceneId: s.id, duration: s.durationSeconds })),

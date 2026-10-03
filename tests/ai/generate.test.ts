@@ -78,6 +78,25 @@ function countingTts(repo: string, runId: string): TtsAdapter & { calls: number 
   })
 }
 
+/** Every scene claims the SAME segment `sceneId`, so `retimeScenes`' duplicate
+ *  guard (R19) fires — pins that a retime failure reports through the timeline
+ *  stage's failStage funnel (R27), not as an escaping RetimeError. */
+function duplicateSegmentTts(repo: string, runId: string): TtsAdapter & { calls: number } {
+  const self = { calls: 0 }
+  const runDir = path.join(repo, 'generated', runId)
+  return Object.assign(self, {
+    async synthesize(input: { sceneId: string; text: string; language: string; voice: string }) {
+      self.calls++
+      fs.mkdirSync(path.join(runDir, 'voice'), { recursive: true })
+      fs.writeFileSync(path.join(runDir, 'voice', `${input.sceneId}.mp3`), `mp3-of-${input.sceneId}`)
+      return {
+        timingSource: 'exact', totalMs: 1000,
+        segments: [{ id: `${input.sceneId}-voice`, text: input.text, startMs: 0, endMs: 1000, words: [], timingSource: 'exact', sceneId: 'scene-001' }],
+      } satisfies VoiceTimeline
+    },
+  })
+}
+
 /** Returns demo scenes re-id'd/retimed to the locked input — valid DSL, compilable.
  *  In 'always-fail' mode `calls` counts ATTEMPTS, not `direct()` invocations: the
  *  bounded retry is stage-local (spec §2/§4 — one invocation, ≤3 attempts inside
@@ -213,6 +232,35 @@ describe('generateProject — resume token-saving (spec §9.2)', () => {
     await expect(generateProject({ brief: { ...BRIEF, topic: 'KHÁC' }, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) }))
       .rejects.toThrow(/BRIEF_MISMATCH/)
   })
+
+  it('corrupt brief.json + DIFFERENT brief with an existing manifest ⇒ BRIEF_MISMATCH (R26)', async () => {
+    const f = fakes()
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    fs.writeFileSync(path.join(repoRoot, 'generated', RUN_ID, 'brief.json'), '{"truncated": ')
+    await expect(generateProject({ brief: { ...BRIEF, topic: 'KHÁC' }, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) }))
+      .rejects.toThrow(/BRIEF_MISMATCH/)
+    expect(f.story.calls).toBe(1) // rejected before any stage ran — the corrupt artifact was NOT overwritten
+    const stillCorrupt = fs.readFileSync(path.join(repoRoot, 'generated', RUN_ID, 'brief.json'), 'utf8')
+    expect(stillCorrupt).toBe('{"truncated": ')
+  })
+
+  it('corrupt brief.json + SAME brief ⇒ resumes normally and self-heals the identity artifact (R26)', async () => {
+    const f = fakes()
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    fs.writeFileSync(path.join(repoRoot, 'generated', RUN_ID, 'brief.json'), 'not json at all')
+    const progress: string[] = []
+    const result = await generateProject({
+      brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f),
+      onProgress: (e) => progress.push(`${e.stage}:${e.status}`),
+    })
+    expect(result.runId).toBe(RUN_ID)
+    expect([f.story.calls, f.tts.calls, f.visual.calls]).toEqual([1, 2, 1]) // zero-call resume still holds
+    expect(progress.filter((p) => p.endsWith(':skip'))).toEqual([
+      'story:skip', 'voice:skip', 'timeline:skip', 'visual:skip', 'compile:skip', 'renderProps:skip',
+    ])
+    const healed = JSON.parse(fs.readFileSync(path.join(repoRoot, 'generated', RUN_ID, 'brief.json'), 'utf8'))
+    expect(healed).toMatchObject({ runId: RUN_ID, payload: BRIEF, sourceHash: expect.any(String) })
+  })
 })
 
 describe('generateProject — failure semantics', () => {
@@ -234,5 +282,22 @@ describe('generateProject — failure semantics', () => {
   it('rejects runIds that are not path-safe (Review Focus 5 — spawn/path injection)', async () => {
     await expect(generateProject({ brief: BRIEF, runId: 'bad id/..\\x', repoRoot, adapters: adaptersOf(fakes()) }))
       .rejects.toThrow(/RUN_ID_INVALID/)
+  })
+
+  it('a retime failure reports through the timeline failStage funnel — no escaping RetimeError (R27)', async () => {
+    const f = { story: countingStory(), tts: duplicateSegmentTts(repoRoot, RUN_ID), visual: countingVisual() }
+    const progress: string[] = []
+    const err = await generateProject({
+      brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f),
+      onProgress: (e) => progress.push(`${e.stage}:${e.status}`),
+    }).catch((e) => e as StageError)
+    expect(err).toBeInstanceOf(StageError)
+    expect((err as StageError).stage).toBe('timeline')
+    expect(progress).toContain('timeline:fail')
+    const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'generated', RUN_ID, 'manifest.json'), 'utf8'))
+    expect(manifest.stages.timeline.status).toBe('failed')
+    expect(manifest.stages.timeline.error).toContain('RETIME_DUPLICATE_SEGMENT')
+    expect(manifest.stages.voice.status).toBe('done') // upstream stages untouched
+    expect(manifest.stages.visual.status).toBe('pending') // downstream stages never ran
   })
 })
