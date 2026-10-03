@@ -1,7 +1,7 @@
 # DeLyAI2 Phase 1A — Real AI Director + Real TTS (Design)
 
 **Date:** 2026-10-03
-**Status:** approved in design review (4/4 sections), pending implementation plan
+**Status:** approved in design review (4/4 sections); review fixes applied 2026-10-03; pending implementation plan
 **Baseline:** `master` @ `9c73ba9` (Phase 0, final review SPEC/QUALITY PASS)
 **Outlines the pipeline that proves:** user brief → StoryDirector → TTS → VoiceTimeline →
 MasterTimeline → VisualDirector → SceneDSL → Compiler → Remotion → MP4 — with no path back to
@@ -18,7 +18,7 @@ narrated MP4 generated from a text brief.
 **Success criteria (all must hold):**
 
 1. One CLI invocation from a Vietnamese brief produces `generated/<runId>/video.mp4`:
-   real voice audio, word-exact voice timing, **0** `VOICE_OVERRUNS_SCENE` warnings,
+   real voice audio, word-level voice timing (ASR-derived), **0** `VOICE_OVERRUNS_SCENE` warnings,
    all Phase 0 gates green (`tsc`, `vitest`, `eslint`, `vite build`, `remotion bundle`).
 2. When every upstream artifact of a run is valid, `--resume <run-id>` does **not** call
    Gemini/TTS/ASR again — it only executes the missing downstream stages.
@@ -32,8 +32,9 @@ narrated MP4 generated from a text brief.
 - StyleRef token consumption by layout/recipes (Phase 1B — 1A only designs the
   vocabulary: style presets are prompt catalogue entries, DSL field already exists).
 - Scene transitions (1C); more recipes (1C); Vision QA / repair loop (1D); benchmark (1E).
-- Agent loops, tool calling, multi-agent orchestration — exactly **2 Gemini calls** per run
-  (story, visual) plus bounded per-stage retries.
+- Agent loops, tool calling, multi-agent orchestration — exactly **two logical Gemini
+  stages** per run: StoryDirector and VisualDirector. Each stage may perform up to
+  3 attempts (§4 rule 2): "2" counts stages, not HTTP calls.
 - Voice cloning, voice design, streaming TTS.
 - `src/domain/` jobs/queue infrastructure; Auth/Credits/Marketplace/Chat/History/Batch/
   Subscription/Billing (Phase 0 scope rule stays in force).
@@ -131,6 +132,11 @@ POST {TTS_BASE_URL}/v1/speech-to-text      (multipart: file=<saved mp3>, languag
   → normalize ONCE: startMs/endMs = Math.round(sec * 1000); pipeline uses ms only
 ```
 
+Segment `timingSource: 'exact'` (enum unchanged): `startMs`/`endMs` derive from the
+measured audio duration — the timeline authority. Word entries are ASR-derived
+estimates and carry their own provenance field `wordTimingSource: 'whisper'` (§12);
+the two semantics never share one label.
+
 ### 5.2 Pinned parameters (recorded in artifact metadata, §7.2)
 
 | Parameter | Value |
@@ -214,10 +220,13 @@ generated/<runId>/              # git-ignored
 { "schemaVersion": "…", "runId": "…", "createdAt": "…", "sourceHash": "…" }
 ```
 
+This includes `render-props.json`; the composition consumes only its declared props
+fields and ignores the header.
+
 ### 7.3 sourceHash chain (stale-resume protection)
 
 ```
-briefHash → story → voice → master-timeline → dsl → compiled → video
+briefHash → story → voice → master-timeline → dsl → compiled → render-props → video
 ```
 
 Each artifact's `sourceHash = hash(canonicalJSON(direct upstream sourceHash + stage
@@ -225,6 +234,10 @@ inputs))`, where stage inputs include the **prompt version** (story/visual), TTS
 block (voice), retime padding (timeline), and engine version (compiled — consistent with
 Phase 0 `compiledHash`). If any upstream hash changes, every downstream recomputed hash
 differs ⇒ those artifacts are invalid and their stages re-run.
+
+`render-props.json`'s `sourceHash` covers its inputs (compiled + timeline + voice). The
+render stage's input hash is that value, recorded in the manifest as `render.sourceHash`
+— `video.mp4` bytes are never hashed (§7.4).
 
 ### 7.4 Stage completion = valid artifact, not file-exists
 
@@ -237,7 +250,7 @@ A stage counts as done only if its artifact **parses and validates semantically*
 | `master-timeline.json` | timeline validation (Σ `durationInFrames === totalFrames`, no diagnostics) + chain match |
 | `project.dsl.json` | `parseProjectDsl` strict + chain match |
 | `compiled/*.json` | IR validation + chain match |
-| `video.mp4` | file exists and non-empty |
+| `video.mp4` | file exists and non-empty **and** manifest `render.sourceHash` equals the current `render-props.json` `sourceHash` (stale check without hashing the MP4) |
 
 `--resume <run-id>` (or implicit resume when the runId already exists) executes only the
 first invalid/missing stage onward. Token-saving is an explicit test target (§9.2).
@@ -245,8 +258,10 @@ first invalid/missing stage onward. Token-saving is an explicit test target (§9
 ### 7.5 Manifest
 
 `manifest.json` holds: runId, createdAt, briefHash, engine version, the §5.2 config block
-(`tts`, `asr`, `retime` exactly as approved), and per-stage status with **each attempt's
-diagnostics** (for debug/reproduce).
+(`tts`, `asr`, `retime` exactly as approved), per-stage status with **each attempt's
+diagnostics** (for debug/reproduce), and the render stage record
+`{ "render": { "sourceHash": "…", "output": "video.mp4" } }` — the `sourceHash` captured
+from `render-props.json` at render time, used by the §7.4 stale check.
 
 ## 8. Orchestrator & entries
 
@@ -284,7 +299,7 @@ them to absolute paths for `<Audio>`.
 
 ## 9. Engine changes & testing
 
-### 9.1 Runtime VoiceTrack (only engine change)
+### 9.1 Runtime VoiceTrack (only runtime change)
 
 - `ProjectVideo` accepts new optional props `voice` and `audioSrcBySceneId`
   (plain data from composition props; types come from `@/timeline` — allowed for runtime).
@@ -294,6 +309,9 @@ them to absolute paths for `<Audio>`.
 - Runtime consumes `sceneWindows` + `audioSrcBySceneId` + `voice` only — **no retime,
   no duration resolution, no audio fallback** (no business logic in the renderer).
 - DSL/IR remain path-free portable JSON; audio paths exist only in props/artifacts.
+- **Timeline field (timeline layer):** `VoiceSegment` gains `wordTimingSource?: 'whisper'`
+  — word provenance kept out of `timingSource` (segment duration authority; enum
+  unchanged, §12). Fixture/estimated segments have empty `words` and omit the field.
 
 ### 9.2 Unit tests (always run; network mocked)
 
@@ -304,6 +322,8 @@ them to absolute paths for `<Audio>`.
 - Retime math; word seconds→ms normalization; `X-Audio-Duration` mismatch (>100 ms ⇒ fail).
 - sourceHash chain: mutating upstream invalidates exactly the downstream set.
 - Resume = semantic validation (corrupt-but-existing file is *not* "done").
+- Stale video: a non-empty `video.mp4` whose manifest `render.sourceHash` ≠ current
+  `render-props.json` `sourceHash` ⇒ the render stage re-runs (§7.4).
 
 ### 9.3 Integration tests (env-gated — skip without credentials)
 
@@ -332,7 +352,7 @@ the default gate if credentials are missing (clean skip, never red).
 
 ```
 AI generation          (non-deterministic — Gemini, TTS)
-    ↓ artifacts        (story, audio, voicetimeline, master-timeline, dsl, compiled, config)
+    ↓ artifacts        (story, audio, voicetimeline, master-timeline, dsl, compiled, render-props, config)
 Deterministic compiler (Phase 0 contract: same DSL ⇒ same compiledHash)
 Deterministic engine   (seeded, no Math.random, call-stream/structural ladder)
     ↓ render
@@ -367,5 +387,9 @@ exception remains exactly `src/ai/project.ts`).
   records what happened. Accepted for 1A.
 - **Player in-app preview** of *generated* runs is an HTML5 `<video>` of the produced MP4,
   not a Remotion Player re-render — chosen deliberately to keep artifacts off the browser.
-- **Whisper word timestamps** are alignment estimates labeled `timingSource: 'exact'` at
-  segment level; word-level precision is as good as the ASR model (recorded, revisitable).
+- **Whisper word timestamps** are ASR-derived alignment estimates, not exact values.
+  The existing enum (`'exact' | 'estimated' | 'fixture'`, unchanged) stays the label for
+  segment/audio duration — `timingSource: 'exact'` means the ffprobe-measured duration
+  authority used for timeline construction. Word provenance is a separate field,
+  `wordTimingSource: 'whisper'` (§5.1, §9.1); word-level precision is as good as the ASR
+  model (ASR config recorded in the manifest; revisitable).
