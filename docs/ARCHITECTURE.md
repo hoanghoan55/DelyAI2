@@ -52,10 +52,11 @@ const compiledScenes = parsed.scenes.map((scene) => compileScene({ dsl: scene, t
 ```
 
 Directors (`src/ai/story`, `src/ai/visual`, `src/ai/assets`, `src/ai/tts`)
-produce DSL or domain output and stop. They import `@/video-engine/schema` (the
-input contract they must satisfy) and `@/timeline` (read-only), never the
-compiler or IR. ESLint enforces the ban via `no-restricted-imports` in
-`eslint.config.js`.
+produce DSL or domain output and stop. Each imports only what it needs —
+`@/video-engine/schema` (the input contract) and/or `@/timeline` (read-only),
+for example the story and visual contracts take `schema`, the TTS adapter takes
+`timeline`, and the assets contract takes neither — never the compiler or IR.
+ESLint enforces the ban via `no-restricted-imports` in `eslint.config.js`.
 
 ## Why `schema/` and `ir/` are separate
 
@@ -86,15 +87,16 @@ not a recipe's renderer).
 The registry is deliberately split in two:
 
 - **Metadata** (`registry/register.ts` → `registerMetadata()`) registers
-  compositions and visual/motion recipe metadata. Compiler tests use this,
-  so they never load Canvas or Three.
+  compositions only, and loads no Canvas or Three code.
 - **Implementations** (`runtime/register-backends.ts` → `registerBackends()`)
-  additionally registers the canvas/three/motion recipe implementations and the
-  three renderer backends. The Remotion entry point and the app use this.
+  calls `registerMetadata()` and additionally registers the canvas/three/motion
+  recipe implementations and the three renderer backends. The Remotion entry
+  point and the app use this; tests reset with `clearRegistered()` and then call
+  `registerBackends()` or targeted `register*()` helpers.
 
-`listAvailable()` exposes recipe ids, versions, and renderer kinds — never
-source code — so a Phase 1 AI director can choose among ids the engine actually
-has.
+`listAvailable()` exposes ids and versions for visual, motion, and composition
+recipes (a `renderer` field on visual recipes only) — never source code — so a
+Phase 1 AI director can choose among ids the engine actually has.
 
 ## Why the runtime never reads the DSL
 

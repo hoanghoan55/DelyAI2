@@ -25,9 +25,9 @@ happens in exactly one place.
 
 ## The one rounding policy
 
-`src/timeline/convert.ts` is the **only** module allowed to convert between time
-units. No module may call `Math.round` / `Math.floor` / `Math.ceil` on a time
-value itself.
+`src/timeline/convert.ts` is the **only** module that performs canonical time
+conversion — seconds ↔ frames ↔ milliseconds ↔ beats. Nothing else should
+convert a scene or cue's time value itself.
 
 ```ts
 secondsToFrames(seconds, fps) => Math.round(seconds * fps)
@@ -37,8 +37,14 @@ framesToMs(frames, fps)       => (frames / fps) * 1000
 beatToFrame(beat, bpm, fps)   => Math.round((beat / bpm) * 60 * fps)
 ```
 
-Tests pin these at both 30 fps and 29.97 fps: the same seconds and fps always
-produce the same frames.
+Two rounded time values exist outside `convert.ts` today, neither of them a
+canonical conversion: `src/ai/tts/fixture.ts` computes a fixture duration as
+`Math.round(durationSeconds * 1000)` ms, and `runtime/TypographyLayer.tsx`
+rounds a display window as `Math.round(fps * 0.6)`. Geometry rounding in
+`compositions/layouts.ts` is pixel-space, not time.
+
+`secondsToFrames` is pinned at both 30 fps and 29.97 fps
+(`tests/timeline/convert.test.ts`); the other four helpers are tested at 30 fps.
 
 ## Scene window accumulation — add in frames, never in seconds
 
@@ -70,11 +76,13 @@ type TimingSource = "exact" | "estimated" | "fixture"
 ```
 
 Used by voice segments and voice timelines. **`estimated` is never treated as
-`exact`.** A voice segment with `timingSource: "estimated"` has an empty `words`
-array (estimated timing is never word-exact), and `buildMasterTimeline` emits a
-`VOICE_ESTIMATED_TIMING` warning when a scene leans on estimated timing. The
-Phase 0 fixture adapter reports `"fixture"` — honest about the fact that no real
-audio exists.
+`exact`.** A voice segment with `timingSource: "estimated"` is documented to
+carry an empty `words` array (estimated timing is never word-exact), though
+nothing in code enforces that. `buildMasterTimeline` emits a
+`VOICE_ESTIMATED_TIMING` warning for such a segment — a real branch in
+`src/timeline/master.ts`, but one no Phase 0 path exercises, because the shipped
+fixture adapter reports `"fixture"`, honest about the fact that no real audio
+exists.
 
 ## Voice timeline
 

@@ -46,7 +46,7 @@ to a **semantic slot** rather than an arbitrary number:
 | `24` | Amber | Warm accent / lines | `geometric-lines` (default) |
 | `160` | Teal | Data / audio | `waveform` (default) |
 
-Canvas recipes emit these as `hsla(hue, ~85–90%, ~60–70%, alpha)`, so a recipe
+Canvas recipes emit these as `hsla(hue, ~80–90%, ~60–70%, alpha)`, so a recipe
 that receives a hue stays inside the system's saturation and lightness range.
 
 The Three.js recipes use hex approximations of the same slots:
@@ -70,13 +70,17 @@ palette. This is what makes "same style ≠ same video" achievable: composition
 decides structure, visual recipe decides content, motion recipe decides
 movement, style decides skin.
 
-In Phase 0 the `StyleRef` plumbing exists end to end:
+In Phase 0 style tokens are part of the **DSL contract**, and the rule above is
+enforced by where they live, but the plumbing into layout is **not wired**:
 
 - `ProjectDSLSchema.style` and `SceneDSLSchema.style` are `StyleRef`
-  (`{ styleId }` or `{ tokens }`).
-- `CompositionDef.layout` receives `style: StyleTokens` (a `JsonObject`).
-- The demo uses `{ styleId: 'default' }`, and no named style registry is
-  wired yet — a Phase 1 concern.
+  (`{ styleId }` or `{ tokens }`) — validated on input.
+- The compiler never reads `dsl.style`, `SceneRenderer` calls the composition
+  `layout` with a hardcoded `style: {}`, and no Phase 0 layout reads
+  `args.style`.
+- The demo uses `{ styleId: 'default' }`; no named style registry exists.
+
+Flowing tokens from the DSL into `layout` is a Phase 1 concern.
 
 Recipes must not import from `src/app/**` (see [`AGENTS.md`](../AGENTS.md)),
 which is also what keeps style out of product UI code.

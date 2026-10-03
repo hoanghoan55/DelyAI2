@@ -18,7 +18,8 @@ requirements.
 - [x] **Motion recipes** — seven (`fade`, `reveal`, `slide`, `scale`, `pulse`,
   `parallax`, `camera-flythrough`), each a pure frame-based transform.
 - [x] **Canvas renders inside Remotion** — drawn per frame, deterministic, with
-  seeded RNG and `dispose`.
+  seeded RNG; the `dispose` hook is wired by the backend (no Phase 0 recipe
+  implements it yet).
 - [x] **Three.js renders inside Remotion** — via `<ThreeCanvas>`, no
   `useFrame()`, GPU resources disposed on unmount.
 - [x] **Remotion composes every layer** — `ProjectVideo` sequences scenes at
@@ -36,9 +37,9 @@ Not commitments; the directions the foundation was built to support.
 
 - **Real AI directors.** Replace the fixture implementations of `StoryDirector`
   and `VisualDirector` with real ones. The contract already exists
-  (`src/ai/*/contract.ts`) and `listAvailable()` already exposes ids, versions,
-  and renderer kinds — never source code — so a director can choose among real
-  recipes.
+  (`src/ai/*/contract.ts`) and `listAvailable()` already exposes ids and
+  versions (plus a renderer kind for visual recipes) — never source code — so a
+  director can choose among real recipes.
 - **Real TTS and a real voice timeline.** The `TtsAdapter` contract returns a
   `VoiceTimeline`; Phase 0 ships fixture timing with `timingSource: "fixture"`.
   A real adapter would produce `timingSource: "exact"` with word timings, and

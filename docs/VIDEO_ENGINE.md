@@ -76,13 +76,17 @@ the recipe verbatim for exactly this reason.
 Two hashes, with different jobs (`compiler/params.ts`, `ir/hash.ts`):
 
 ```
-sourceHash   = hash(canonical DSL + schemaVersion + engineVersion + asset fingerprints)
+sourceHash   = hash(canonical DSL + schemaVersion + asset fingerprints)
 compiledHash = hash(canonical IR, with provenance.compiledHash EXCLUDED)
 ```
 
 - `sourceHash` proves the **input** was the same.
 - `compiledHash` proves the **compiler produced the same output** — this is the
   real determinism test.
+
+`engineVersion` enters `compiledHash`, not `sourceHash`: it is part of the
+provenance that `computeCompiledHash` hashes (`ir/hash.ts`), while
+`computeSourceHash` hashes only `{ schemaVersion, dsl, assetFingerprints }`.
 
 ### Non-circular, two-step
 
@@ -146,15 +150,18 @@ type VisualRecipe = {
 
 Resolution API: `resolveVisual(id)`, `resolveMotion(id)`, `resolveComposition(id)`,
 plus non-throwing `hasVisual/hasMotion/hasComposition`, and `listAvailable()`
-(ids, versions, renderer kinds only — never source code).
+(ids and versions for all three kinds; a `renderer` field on visual recipes only
+— never source code).
 
-Registration is split so tests stay renderer-free:
+Registration is split into two entry points:
 
 - `registerMetadata()` (`registry/register.ts`) registers compositions only.
-- `registerBackends()` (`runtime/register-backends.ts`) registers compositions,
-  the canvas/three/motion recipe implementations, and the three renderer
-  backends. The Remotion entry point and the app call this; `clearRegistered()`
-  resets everything between tests.
+- `registerBackends()` (`runtime/register-backends.ts`) calls `registerMetadata()`
+  and additionally registers the canvas/three/motion recipe implementations and
+  the three renderer backends. The Remotion entry point and the app call this;
+  `clearRegistered()` resets everything between tests. (Tests call
+  `registerBackends()` or targeted `register*()` helpers directly — no test
+  calls `registerMetadata()`.)
 
 **Renderer backends** are a separate small registry
 (`registry/renderer-backends.ts`): `registerRendererBackend(kind, backend)`,
@@ -188,8 +195,8 @@ Integration rules (`Canvas2DBackend.tsx`):
 
 - Drawing is a **pure function of `frame`**, via `useCurrentFrame()` — never a
   wall-clock animation loop. `render(frame)` can be called for any frame in any
-  order and produces the same pixels (pinned by `tests/video-engine/canvas.test.ts`
-  using a headless recording context).
+  order and produces the same 2D draw call stream (pinned by
+  `tests/video-engine/canvas.test.ts` using a headless recording context).
 - `prepare` runs once per layer instance; `dispose` runs on unmount.
 - The seeded RNG is constructed from the layer id and absolute frame and passed
   into `render` — recipes never call `Math.random()`.
@@ -238,9 +245,11 @@ than overstated (`tests/determinism/determinism.test.ts`):
 1. **Compiler — exact.** `compile(input)` twice produces identical
    `provenance.compiledHash` (a 64-character SHA-256 hex digest). This is the
    primary determinism gate.
-2. **Canvas — pixel level.** Canvas drawing is a pure function of the frame:
-   the same frame draws the same call stream regardless of draw order. The suite
-   drives every recipe headlessly; there is **no golden-image test in CI**.
+2. **Canvas — geometry / call-stream exact.** Canvas drawing is a pure function
+   of the frame: the same frame draws the same 2D call stream regardless of
+   draw order, so the geometry and sampled positions reproduce exactly. The
+   suite drives every recipe headlessly through a recording context (call
+   stream, not rasterized pixels); there is **no golden-image test in CI**.
 3. **Three.js — structural.** Determinism is a `structuralHashOf(descriptor)`
    over a `SceneDescriptor` (recipe id/version, frame, camera, object
    transforms, geometry/material/light params, seed) — a data-only value that

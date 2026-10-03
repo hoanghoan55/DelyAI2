@@ -35,7 +35,7 @@ MP4
 
 - **Scene DSL** — a versioned, Zod-strict, non-executable description of intent. AI emits this, nothing lower.
 - **Master Timeline** — the single source of truth for time. Owns scene windows, voice/music timelines, and frame conversion.
-- **Scene Compiler** — the only DSL → IR boundary. Validates against the registry, resolves recipe renderers and params, binds frame windows. Never reads the timeline's internals; only `sceneWindows[sceneId]`.
+- **Scene Compiler** — the only DSL → IR boundary. Validates against the registry, resolves recipe renderers and params, binds frame windows. Reads only the timeline's public fields — `sceneWindows[sceneId]` for the scene's window, plus `fps`/`width`/`height` for `render` — and never computes timing itself.
 - **Compiled IR** — data-only, JSON-serializable, integer frames. The runtime interprets it and nothing else.
 - **Runtime** — a thin interpreter that dispatches each IR layer to its registered renderer backend.
 
@@ -44,7 +44,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full layer map and de
 ## Requirements
 
 - Node.js (ES2022 target) and **npm**.
-- The Remotion family is pinned to `4.0.191`; `zod` is pinned to `3.22.3` (required by Remotion's `schema` prop). Do not bump them independently.
+- The Remotion family is pinned to `4.0.191`; `zod` is pinned to `3.22.3` for **our own** Scene DSL validation (the `.strict()` behavior of the DSL schema depends on it — it is not a Remotion requirement). Do not bump them independently.
 
 ## Install and run
 
@@ -87,8 +87,9 @@ content) — from a fixture Scene DSL, with no real AI and no audio:
 | 4 | Typography outro | `centered` | typography | DOM | 6.0 s |
 
 The fixture project comes from `src/ai/visual/fixture.ts` (the visual director's
-single authored slice); `src/ai/fixtures/demo-project.dsl.json` is a byte-for-byte
-inspection mirror of the same project, asserted equal in the test suite.
+single authored slice); `src/ai/fixtures/demo-project.dsl.json` is a JSON
+inspection mirror of the same project, asserted value-identical to the
+TypeScript fixture by deep equality in the test suite.
 
 On this machine the rendered stills and the full MP4 reproduced byte-identically
 across runs. That is an observation, not a guarantee the repository asserts:
