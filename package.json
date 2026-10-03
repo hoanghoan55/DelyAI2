@@ -12,12 +12,13 @@
     "lint": "eslint .",
     "build": "vite build",
     "bundle:remotion": "remotion bundle remotion/index.ts",
-    "render:demo": "remotion render remotion/index.ts DeLyDemo out/demo.mp4"
+    "render:demo": "remotion render remotion/index.ts DeLyDemo out/demo.mp4",
+    "render:stills": "remotion still remotion/index.ts DeLyDemo out/still-450.png --frame=450 && remotion still remotion/index.ts DeLyDemo out/still-451.png --frame=451"
   },
   "dependencies": {
+    "@react-three/fiber": "8.17.10",
     "@remotion/player": "4.0.190",
     "@remotion/three": "4.0.190",
-    "@react-three/fiber": "8.17.10",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "remotion": "4.0.190",
@@ -25,6 +26,7 @@
     "zod": "3.22.3"
   },
   "devDependencies": {
+    "@remotion/cli": "4.0.191",
     "@types/node": "22.8.1",
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
