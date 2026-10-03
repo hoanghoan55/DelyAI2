@@ -6,3 +6,7 @@ build/
 *.mp4
 *.log
 .DS_Store
+.env
+generated/
+public/generated/
+.superpowers/
