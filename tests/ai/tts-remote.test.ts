@@ -82,6 +82,21 @@ describe('createRemoteTtsAdapter', () => {
     expect(tl.segments[0]!.endMs).toBe(1100) // measured wins, once, rounded once
   })
 
+  it('hard-fails with TTS_HEADER_MISSING when X-Audio-Duration is absent (R14)', async () => {
+    // Number(null) === 0 is finite — the guard must null-check the raw header, not Number() it.
+    const fetchImpl = makeFetch({ tts: () => new Response(MP3_BYTES) })
+    const adapter = createRemoteTtsAdapter({ ...base, outDir, fetchImpl, measureDuration: async () => 1.0 })
+    await expect(adapter.synthesize({ text: 'x', language: 'vi', voice: 'v1', sceneId: 's1' }))
+      .rejects.toThrow(/TTS_HEADER_MISSING/)
+  })
+
+  it('hard-fails with TTS_HEADER_MISSING when X-Audio-Duration is non-numeric (R14)', async () => {
+    const fetchImpl = makeFetch({ tts: () => new Response(MP3_BYTES, { headers: { 'X-Audio-Duration': 'not-a-number' } }) })
+    const adapter = createRemoteTtsAdapter({ ...base, outDir, fetchImpl, measureDuration: async () => 1.0 })
+    await expect(adapter.synthesize({ text: 'x', language: 'vi', voice: 'v1', sceneId: 's1' }))
+      .rejects.toThrow(/TTS_HEADER_MISSING/)
+  })
+
   it('hard-fails when word_timestamps=true but words are absent (spec §6.2)', async () => {
     const asr = { ...ASR_OK, segments: [{ start: 0, end: 1.0 }] } // no words key
     const fetchImpl = makeFetch({ asr: () => Response.json(asr) })

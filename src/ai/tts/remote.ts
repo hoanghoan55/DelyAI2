@@ -58,8 +58,14 @@ export function createRemoteTtsAdapter(options: RemoteTtsOptions): TtsAdapter {
         }),
       })
       if (!ttsRes.ok) throw new Error(`TTS_HTTP_${ttsRes.status}: ${ttsUrl}`)
-      const headerSeconds = Number(ttsRes.headers.get('x-audio-duration'))
-      if (!Number.isFinite(headerSeconds)) throw new Error('TTS_HEADER_MISSING: X-Audio-Duration absent')
+      // Null-check BEFORE Number(): Number(null) === 0 is finite, so an absent
+      // header would otherwise pass as 0s (spec §5.3 — absence is its own failure).
+      const rawHeader = ttsRes.headers.get('x-audio-duration')
+      if (rawHeader === null) throw new Error('TTS_HEADER_MISSING: X-Audio-Duration absent')
+      const headerSeconds = Number(rawHeader)
+      if (rawHeader.trim() === '' || !Number.isFinite(headerSeconds)) {
+        throw new Error(`TTS_HEADER_MISSING: X-Audio-Duration invalid value "${rawHeader}"`)
+      }
       const bytes = Buffer.from(await ttsRes.arrayBuffer())
 
       // 2) save, then measure — header never trusted alone (spec §5.3)
