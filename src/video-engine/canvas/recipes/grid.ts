@@ -3,7 +3,7 @@ import { createCanvasRecipe } from '../types'
 
 export const grid = createCanvasRecipe({
   id: 'grid', version: '1.0.0',
-  paramsSchema: z.object({ cell: z.number().positive().default(72), hue: z.number().default(210), opacity: z.number().default(0.18) }),
+  paramsSchema: z.object({ cell: z.number().positive().finite().default(72), hue: z.number().finite().default(210), opacity: z.number().finite().default(0.18) }),
   prepare: () => ({}),
   render: (ctx, { frame, fps, size, params }) => {
     const offset = ((frame / fps) % 1) * params.cell

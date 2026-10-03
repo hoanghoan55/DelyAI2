@@ -4,7 +4,7 @@ import { createCanvasRecipe } from '../types'
 
 export const geometricLines = createCanvasRecipe({
   id: 'geometric-lines', version: '1.0.0',
-  paramsSchema: z.object({ lines: z.number().int().positive().default(48), hue: z.number().default(24) }),
+  paramsSchema: z.object({ lines: z.number().int().positive().default(48), hue: z.number().finite().default(24) }),
   prepare: (_ctx, _size, params) => {
     const rng = createSeededRandom(params.lines * 17 + 3)
     return { seeds: Array.from({ length: params.lines }, () => ({ a: rng.next(), b: rng.next() })) }

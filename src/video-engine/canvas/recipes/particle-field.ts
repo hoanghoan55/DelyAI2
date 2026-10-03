@@ -4,8 +4,8 @@ import { createCanvasRecipe } from '../types'
 
 const schema = z.object({
   count: z.number().int().positive().default(40),
-  hue: z.number().default(200),
-  speed: z.number().default(1),
+  hue: z.number().finite().default(200),
+  speed: z.number().finite().default(1),
 })
 
 type Particle = { x: number; y: number; r: number; phase: number }

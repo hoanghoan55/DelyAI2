@@ -45,7 +45,8 @@ rounds a display window as `Math.round(fps * 0.6)`. Geometry rounding in
 
 `secondsToFrames` is pinned at both 30 fps and 29.97 fps
 (`tests/timeline/convert.test.ts`); `framesToSeconds`, `msToFrames`, and
-`beatToFrame` are tested at 30 fps; `framesToMs` has no test today.
+`beatToFrame` are tested at 30 fps; `framesToMs` is tested at 30 fps (exact)
+and 29.97 fps (fractional, `toBeCloseTo`).
 
 ## Scene window accumulation — add in frames, never in seconds
 

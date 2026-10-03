@@ -4,7 +4,7 @@ import { createCanvasRecipe } from '../types'
 
 export const waveform = createCanvasRecipe({
   id: 'waveform', version: '1.0.0',
-  paramsSchema: z.object({ bars: z.number().int().positive().default(64), hue: z.number().default(160), amp: z.number().default(0.35) }),
+  paramsSchema: z.object({ bars: z.number().int().positive().default(64), hue: z.number().finite().default(160), amp: z.number().finite().default(0.35) }),
   prepare: (_ctx, _size, params) => {
     const rng = createSeededRandom(params.bars * 31 + 7)
     return { levels: Array.from({ length: params.bars }, () => rng.float(0.2, 1)) }

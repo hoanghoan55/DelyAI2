@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { compileScene, CompilerError, computeSourceHash } from '@/video-engine/compiler'
-import { clearRegistry, clearRendererBackends } from '@/video-engine/registry'
+import { clearRegistry, clearRendererBackends, registerVisual } from '@/video-engine/registry'
 import { computeCompiledHash } from '@/video-engine/ir/hash'
 import { canonicalize } from '@/shared'
 import { registerTestRecipes } from './fixtures/test-recipes'
 import { buildMasterTimeline } from '@/timeline/master'
-import type { SceneDSL } from '@/video-engine/schema'
+import { grid } from '@/video-engine/canvas/recipes/grid'
+import type { z } from 'zod'
+import type { JsonObject, SceneDSL } from '@/video-engine/schema'
 
 const timelineFor = (duration: number) =>
   buildMasterTimeline({ fps: 30, width: 1920, height: 1080, scenes: [{ sceneId: 'scene-01', duration }], voiceScenePolicy: 'strict' })
@@ -230,6 +232,23 @@ describe('compileScene — recipe params rejected by the recipe schema (INVALID_
     // JsonObjectSchema accepts any JSON, so the DSL schema admits { count: 1.5 }
     // even though particle-field's paramsSchema requires an integer count.
     const e = captureError(() => compileScene({ dsl: { ...dsl, visual: [{ recipe: 'particle-field', params: { count: 1.5 } }] }, timeline: timelineFor(6) }))
+    expect(e).toBeInstanceOf(CompilerError)
+    expect(e.diagnostics.some((d) => d.code === 'INVALID_PARAMS')).toBe(true)
+  })
+
+  it('rejects a non-finite recipe param (Infinity) at schema time with INVALID_PARAMS (M1)', () => {
+    // Register the REAL grid recipe: its paramsSchema carries .finite(), which is
+    // the M1 fix. The compiler test doubles keep bare z.number() schemas, so they
+    // cannot pin this path. Without .finite(), resolveParams would accept Infinity
+    // and canonicalize would later throw a bare Error instead of INVALID_PARAMS.
+    registerVisual({
+      id: grid.id, version: grid.version, renderer: 'canvas2d',
+      paramsSchema: grid.paramsSchema as z.ZodType<JsonObject>, defaults: {},
+    })
+    const e = captureError(() => compileScene({
+      dsl: { ...dsl, visual: [{ recipe: 'grid', params: { opacity: Number.POSITIVE_INFINITY } }] },
+      timeline: timelineFor(6),
+    }))
     expect(e).toBeInstanceOf(CompilerError)
     expect(e.diagnostics.some((d) => d.code === 'INVALID_PARAMS')).toBe(true)
   })

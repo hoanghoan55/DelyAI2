@@ -4,7 +4,7 @@ import { createMotionRecipeImpl, IDENTITY_TRANSFORM } from '../types'
 
 export const slide = createMotionRecipeImpl({
   id: 'slide', version: '1.0.0',
-  paramsSchema: z.object({ axis: z.enum(['x', 'y']).default('y'), distance: z.number().default(0.12), easing: z.enum(['linear', 'out']).default('out') }),
+  paramsSchema: z.object({ axis: z.enum(['x', 'y']).default('y'), distance: z.number().finite().default(0.12), easing: z.enum(['linear', 'out']).default('out') }),
   apply: ({ frame, durationInFrames, params }) => {
     const p = interpolate(frame, [0, durationInFrames], [1, 0], {
       extrapolateLeft: 'clamp', extrapolateRight: 'clamp',

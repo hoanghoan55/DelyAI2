@@ -3,7 +3,7 @@ import { createCanvasRecipe } from '../types'
 
 export const glow = createCanvasRecipe({
   id: 'glow', version: '1.0.0',
-  paramsSchema: z.object({ hue: z.number().default(265), intensity: z.number().default(0.55), radius: z.number().default(0.5) }),
+  paramsSchema: z.object({ hue: z.number().finite().default(265), intensity: z.number().finite().default(0.55), radius: z.number().finite().default(0.5) }),
   prepare: () => ({}),
   render: (ctx, { frame, fps, size, params }) => {
     const t = frame / fps

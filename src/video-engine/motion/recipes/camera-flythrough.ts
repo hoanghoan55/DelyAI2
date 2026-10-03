@@ -8,7 +8,7 @@ import { IDENTITY_TRANSFORM, createMotionRecipeImpl } from '../types'
  */
 export const cameraFlythrough = createMotionRecipeImpl({
   id: 'camera-flythrough', version: '1.0.0',
-  paramsSchema: z.object({ from: z.number().default(0.86), to: z.number().default(1.06), drift: z.number().default(0.01) }),
+  paramsSchema: z.object({ from: z.number().finite().default(0.86), to: z.number().finite().default(1.06), drift: z.number().finite().default(0.01) }),
   apply: ({ frame, durationInFrames, params }) => {
     const p = interpolate(frame, [0, durationInFrames], [0, 1], {
       extrapolateLeft: 'clamp', extrapolateRight: 'clamp', easing: Easing.out(Easing.quad),

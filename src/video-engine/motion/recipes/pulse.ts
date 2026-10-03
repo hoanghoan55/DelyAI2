@@ -7,7 +7,7 @@ import { IDENTITY_TRANSFORM, createMotionRecipeImpl } from '../types'
  */
 export const pulse = createMotionRecipeImpl({
   id: 'pulse', version: '1.0.0',
-  paramsSchema: z.object({ amplitude: z.number().default(0.03), hz: z.number().default(0.5) }),
+  paramsSchema: z.object({ amplitude: z.number().finite().default(0.03), hz: z.number().finite().default(0.5) }),
   apply: ({ frame, fps, params }) => ({
     ...IDENTITY_TRANSFORM,
     scale: 1 + Math.sin((frame / fps) * Math.PI * 2 * params.hz) * params.amplitude,

@@ -7,7 +7,7 @@ import { createThreeRecipe, type SceneDescriptor } from '../types'
 
 const schema = z.object({
   nodes: z.number().int().positive().default(24),
-  radius: z.number().default(2.6),
+  radius: z.number().finite().default(2.6),
   color: z.string().default('#4a9eff'),
 })
 type P = z.infer<typeof schema>

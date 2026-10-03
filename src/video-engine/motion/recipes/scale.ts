@@ -4,7 +4,7 @@ import { createMotionRecipeImpl, IDENTITY_TRANSFORM } from '../types'
 
 export const scale = createMotionRecipeImpl({
   id: 'scale', version: '1.0.0',
-  paramsSchema: z.object({ from: z.number().default(0.92), to: z.number().default(1) }),
+  paramsSchema: z.object({ from: z.number().finite().default(0.92), to: z.number().finite().default(1) }),
   apply: ({ frame, durationInFrames, params }) => ({
     ...IDENTITY_TRANSFORM,
     scale: interpolate(frame, [0, durationInFrames], [params.from, params.to], {

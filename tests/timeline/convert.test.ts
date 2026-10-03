@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { secondsToFrames, framesToSeconds, msToFrames, beatToFrame } from '@/timeline/convert'
+import { secondsToFrames, framesToSeconds, framesToMs, msToFrames, beatToFrame } from '@/timeline/convert'
 
 describe('secondsToFrames', () => {
   it('is exact at 30fps for whole seconds', () => {
@@ -25,5 +25,13 @@ describe('inverse and derived conversions', () => {
   })
   it('beatToFrame maps beats deterministically', () => {
     expect(beatToFrame(4, 120, 30)).toBe(60) // 4 beats @120bpm = 2s = 60 frames
+  })
+  it('framesToMs is exact at 30fps for whole minutes', () => {
+    expect(framesToMs(1800, 30)).toBe(60000) // 1800/30 = 60s = 60000ms
+  })
+  it('framesToMs at 29.97fps is fractional and asserted approximately', () => {
+    // (1800 / 29.97) * 1000 = 60060.06006006006… — non-terminating decimal, so
+    // a binary64 value is not exact; pin centiseconds with toBeCloseTo.
+    expect(framesToMs(1800, 29.97)).toBeCloseTo(60060.06, 2)
   })
 })
