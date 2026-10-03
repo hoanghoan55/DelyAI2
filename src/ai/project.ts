@@ -7,6 +7,10 @@ import { compileScene, CompilerError } from '@/video-engine/compiler'
 import { buildMasterTimeline } from '@/timeline/master'
 import { demoProjectDsl } from './demo-project.dsl'
 
+// R22: the composition root is the sole ai/** module allowed to reach the IR —
+// re-exported here so artifacts.ts can verify compiled hashes without importing video-engine/ir.
+export { computeCompiledHash } from '@/video-engine/ir'
+
 export type FixtureProject = { dsl: ProjectDsl; compiledScenes: CompiledScene[]; timeline: MasterTimeline }
 
 /**
