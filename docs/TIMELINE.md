@@ -20,8 +20,8 @@ Helpers `seconds(n)`, `milliseconds(n)`, and `frames(n)` construct branded
 values from plain numbers.
 
 **The DSL is in seconds. The IR is in frames.** Milliseconds appear only in the
-voice timeline (audio timing is measured in ms by external tools). Conversion
-happens in exactly one place.
+voice timeline (audio timing is measured in ms by external tools). Canonical
+conversion happens in exactly one place.
 
 ## The one rounding policy
 
@@ -44,7 +44,8 @@ rounds a display window as `Math.round(fps * 0.6)`. Geometry rounding in
 `compositions/layouts.ts` is pixel-space, not time.
 
 `secondsToFrames` is pinned at both 30 fps and 29.97 fps
-(`tests/timeline/convert.test.ts`); the other four helpers are tested at 30 fps.
+(`tests/timeline/convert.test.ts`); `framesToSeconds`, `msToFrames`, and
+`beatToFrame` are tested at 30 fps; `framesToMs` has no test today.
 
 ## Scene window accumulation — add in frames, never in seconds
 
