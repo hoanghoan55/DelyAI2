@@ -23,7 +23,13 @@ describe('determinism levels', () => {
     expect(a.every((h) => /^[0-9a-f]{64}$/.test(h))).toBe(true)
   })
 
-  it('canvas: sampled geometry is a pure function of the frame (sampling level)', () => {
+  // `samplePositions` is an inspection API, not the render path: only
+  // `particle-field` implements it, and the renderer emits pixels through
+  // `recipe.render(...)`, never through this helper. Render-path coverage lives
+  // in `tests/video-engine/canvas.test.ts`, which drives `recipe.render` headlessly
+  // across every canvas recipe; this block pins only the sampled geometry of the
+  // one recipe that exposes it.
+  it('particle-field: sampled geometry is a pure function of the frame (sampling level)', () => {
     const recipe = getCanvasRecipe('particle-field')
     const params = recipe.paramsSchema.parse({})
     const size = { width: 1920, height: 1080 }
