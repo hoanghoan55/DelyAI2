@@ -8,7 +8,7 @@ describe('ai contracts + fixture implementations', () => {
     expect(plan.scenes.map((s) => s.purpose)).toEqual(['hook', 'explain_concept', 'explain_network', 'outro'])
   })
   it('fixture visual director assigns recipes with declared renderers', async () => {
-    const plan = await createFixtureVisualDirector().direct({ topic: 'x', language: 'vi', scenes: [], availableCompositions: [], availableVisualRecipes: [], availableMotionRecipes: [], style: { styleId: 'default' }, assets: [], timelineWindow: { startSeconds: 0, durationSeconds: 30 }, constraints: {} })
+    const plan = await createFixtureVisualDirector().direct({ topic: 'x', language: 'vi', scenes: [], availableCompositions: [], availableVisualRecipes: [], availableMotionRecipes: [], style: { styleId: 'default' }, assets: [], timelineWindow: { startSeconds: 0, durationSeconds: 30 }, constraints: {}, sceneWindows: {}, fps: 30 })
     expect(plan).toHaveLength(4)
     expect(plan[0]!.composition).toBe('hero')
     expect(plan[2]!.visual.some((l) => l.recipe === 'network-graph')).toBe(true)
