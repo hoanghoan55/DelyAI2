@@ -44,6 +44,16 @@ describe('retimeScenes', () => {
     try { retimeScenes(scenes, stray); throw new Error('should have thrown') }
     catch (e) { expect((e as RetimeError).code).toBe('RETIME_UNKNOWN_SCENE') }
   })
+
+  it('throws RETIME_DUPLICATE_SEGMENT when two segments claim the same scene', () => {
+    // Third segment duplicates scene-001: every scene still has a segment, so
+    // without duplicate detection Map last-wins silently retimes on the wrong audio.
+    const dup = voice(1000, 1000)
+    dup.segments.push({ id: 'c', text: 'n1 again', startMs: 1000, endMs: 2000, words: [], timingSource: 'exact', sceneId: 'scene-001' })
+    expect(() => retimeScenes(scenes, dup)).toThrow(RetimeError)
+    try { retimeScenes(scenes, dup); throw new Error('should have thrown') }
+    catch (e) { expect((e as RetimeError).code).toBe('RETIME_DUPLICATE_SEGMENT') }
+  })
 })
 
 describe('strict construction at rounding edges (Review Focus 4)', () => {
