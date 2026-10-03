@@ -22,9 +22,10 @@ import type { AttemptRecord } from './gemini/retry'
 import {
   briefHash, stageSourceHash, createManifest, readManifest, writeManifest,
   writeJsonArtifact, readJsonArtifact,
-  validateStory, validateVoice, validateTimeline, validateVisual, validateCompiled, validateRenderProps,
+  validateStory, validateVoice, validateTimeline, validateVisual, validateCompiled, validateRenderProps, validateVideo,
   type GenerateStage,
 } from './artifacts'
+import { renderVideo } from './render'
 
 export type { GenerateStage }
 export type GenerateProgress = { stage: GenerateStage; status: 'start' | 'done' | 'skip' | 'fail'; detail?: string }
@@ -47,12 +48,13 @@ export type GenerateOptions = {
   adapters?: { story?: StoryDirector; visual?: VisualDirector; tts?: TtsAdapter }
   fetchImpl?: typeof fetch
   measureDuration?: (filePath: string) => Promise<number>
+  renderVideo?: (o: Parameters<typeof renderVideo>[0]) => Promise<{ videoPath: string }>
   onProgress?: (event: GenerateProgress) => void
 }
 
 export type GenerateResult = {
   runId: string; dir: string
-  videoPath: string | null
+  videoPath: string
   renderPropsPath: string
   story: StoryPlan; voice: VoiceTimeline; timeline: MasterTimeline
   diagnostics: Diagnostic[]
@@ -351,12 +353,33 @@ export async function generateProject(options: GenerateOptions): Promise<Generat
     } catch (err) { failStage('renderProps', err) }
   }
 
-  // The render stage (video.mp4 + manifest.render) is added by Task 11; up to
-  // render-props the run is complete and `videoPath` stays null.
+  // ---- ⑦ render ----------------------------------------------------------
+  const propsHash = upstream // render-props sourceHash — the render stage's input (spec §7.5)
+  const videoValid = validateVideo(dir, propsHash)
+  let videoPath: string
+  if (videoValid.ok) {
+    videoPath = path.join(dir, 'video.mp4')
+    progress({ stage: 'render', status: 'skip' })
+  } else {
+    progress({ stage: 'render', status: 'start', detail: videoValid.reason })
+    try {
+      const renderFn = options.renderVideo ?? renderVideo
+      const out = await renderFn({
+        runDir: dir, runId, repoRoot,
+        propsPath: path.join(dir, 'render-props.json'),
+        totalFrames: timeline.totalFrames, fps: timeline.fps,
+      })
+      manifest.render = { sourceHash: propsHash, output: 'video.mp4' }
+      manifest.stages.render = { status: 'done', sourceHash: propsHash, at: new Date().toISOString() }
+      writeManifest(dir, manifest)
+      videoPath = out.videoPath
+      progress({ stage: 'render', status: 'done' })
+    } catch (err) { failStage('render', err) }
+  }
 
   return {
     runId, dir,
-    videoPath: null,
+    videoPath,
     renderPropsPath: path.join(dir, 'render-props.json'),
     story, voice, timeline,
     diagnostics: timeline.diagnostics,

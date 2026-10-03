@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -130,13 +130,23 @@ function fakes() {
 }
 const adaptersOf = (f: ReturnType<typeof fakes>) => ({ story: f.story, tts: f.tts, visual: f.visual })
 
+/** R7: a FACTORY, never a shared module-level singleton — vitest.config has no
+ *  clearMocks, so a shared `vi.fn` would leak call counts across tests. Each test
+ *  calls `makeFakeRender()` and passes its own instance to `generateProject`. */
+const makeFakeRender = () => vi.fn(async ({ runDir }: { runDir: string }) => {
+  fs.writeFileSync(path.join(runDir, 'video.mp4'), 'mp4')
+  return { videoPath: path.join(runDir, 'video.mp4') }
+})
+
 describe('generateProject — full pipeline through render-props (spec §3 order)', () => {
   it('writes every artifact with a consistent chain; result carries timeline/voice/story', async () => {
     const f = fakes()
+    const fakeRender = makeFakeRender()
     const progress: string[] = []
     const result = await generateProject({
       brief: BRIEF, runId: RUN_ID, repoRoot,
       adapters: adaptersOf(f),
+      renderVideo: fakeRender,
       onProgress: (e) => progress.push(`${e.stage}:${e.status}`),
     })
 
@@ -149,7 +159,7 @@ describe('generateProject — full pipeline through render-props (spec §3 order
 
     // pipeline order visible in progress events (spec §3)
     const starts = progress.filter((p) => p.endsWith(':start')).map((p) => p.split(':')[0])
-    expect(starts).toEqual(['story', 'voice', 'timeline', 'visual', 'compile', 'renderProps'])
+    expect(starts).toEqual(['story', 'voice', 'timeline', 'visual', 'compile', 'renderProps', 'render'])
 
     // audio authority: durations = endMs/1000 + 0.5
     expect(result.story.scenes.map((s) => s.id)).toEqual(['scene-001', 'scene-002'])
@@ -157,7 +167,8 @@ describe('generateProject — full pipeline through render-props (spec §3 order
     expect(result.timeline.sceneWindows['scene-001']!.durationInFrames).toBe(75)  // 2.5s @30
     expect(result.timeline.sceneWindows['scene-002']!.durationInFrames).toBe(60)  // 2.0s @30
     expect(result.timeline.diagnostics).toEqual([])                               // zero voice warnings by construction
-    expect(result.videoPath).toBeNull()                                           // render stage lands in Task 11
+    expect(result.videoPath).toBe(path.join(dir, 'video.mp4'))
+    expect(fakeRender).toHaveBeenCalledTimes(1)
 
     // render-props carries props + header (spec §7.2)
     const propsDoc = JSON.parse(fs.readFileSync(path.join(dir, 'render-props.json'), 'utf8'))
@@ -185,19 +196,21 @@ describe('generateProject — full pipeline through render-props (spec §3 order
 describe('generateProject — resume token-saving (spec §9.2)', () => {
   it('valid upstream ⇒ zero story/TTS/visual calls; every stage reports skip', async () => {
     const f = fakes()
-    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    const fakeRender = makeFakeRender()
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: fakeRender })
     expect([f.story.calls, f.tts.calls, f.visual.calls]).toEqual([1, 2, 1])
 
     const progress: string[] = []
     await generateProject({
-      brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f),
+      brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: fakeRender,
       onProgress: (e) => progress.push(`${e.stage}:${e.status}`),
     })
     expect([f.story.calls, f.tts.calls, f.visual.calls]).toEqual([1, 2, 1]) // UNCHANGED — 0 new calls
     expect(progress.filter((p) => p.endsWith(':skip'))).toEqual([
-      'story:skip', 'voice:skip', 'timeline:skip', 'visual:skip', 'compile:skip', 'renderProps:skip',
+      'story:skip', 'voice:skip', 'timeline:skip', 'visual:skip', 'compile:skip', 'renderProps:skip', 'render:skip',
     ])
     expect(progress.filter((p) => p.endsWith(':start'))).toEqual([])
+    expect(fakeRender).toHaveBeenCalledTimes(1) // resume did not re-render
   })
 
   it('run #1 Visual fails 3 attempts → resume: Story/TTS counts unchanged, Visual retried (spec §9.2)', async () => {
@@ -210,7 +223,7 @@ describe('generateProject — resume token-saving (spec §9.2)', () => {
     expect(failedManifest.stages.visual.attempts).toHaveLength(3)
 
     f.visual = countingVisual('ok') // second attempt: the director is fixed
-    const result = await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    const result = await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: makeFakeRender() })
     expect([f.story.calls, f.tts.calls]).toEqual([1, 2])     // ZERO new story/TTS calls
     expect(f.visual.calls).toBe(1)                            // visual retried from scratch
     expect(result.timeline.sceneWindows['scene-001']!.durationInFrames).toBe(75)
@@ -218,24 +231,26 @@ describe('generateProject — resume token-saving (spec §9.2)', () => {
 
   it('corrupt-but-existing story.json is NOT done — story re-runs (Review Focus 2)', async () => {
     const f = fakes()
-    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: makeFakeRender() })
     const storyPath = path.join(repoRoot, 'generated', RUN_ID, 'story.json')
     fs.writeFileSync(storyPath, '{"truncated": ')
-    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    // After corruption the sourceHash chain moves, so render legitimately re-runs
+    // here — the injection only prevents a real spawn, no count assertion.
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: makeFakeRender() })
     expect(f.story.calls).toBe(2)  // re-ran
     expect(f.tts.calls).toBe(4)    // new story hash invalidates voice (§7.3) — re-ran too
   })
 
   it('same runId with a DIFFERENT brief is a hard failure (no silent resume)', async () => {
     const f = fakes()
-    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: makeFakeRender() })
     await expect(generateProject({ brief: { ...BRIEF, topic: 'KHÁC' }, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) }))
       .rejects.toThrow(/BRIEF_MISMATCH/)
   })
 
   it('corrupt brief.json + DIFFERENT brief with an existing manifest ⇒ BRIEF_MISMATCH (R26)', async () => {
     const f = fakes()
-    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: makeFakeRender() })
     fs.writeFileSync(path.join(repoRoot, 'generated', RUN_ID, 'brief.json'), '{"truncated": ')
     await expect(generateProject({ brief: { ...BRIEF, topic: 'KHÁC' }, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) }))
       .rejects.toThrow(/BRIEF_MISMATCH/)
@@ -246,17 +261,18 @@ describe('generateProject — resume token-saving (spec §9.2)', () => {
 
   it('corrupt brief.json + SAME brief ⇒ resumes normally and self-heals the identity artifact (R26)', async () => {
     const f = fakes()
-    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f) })
+    const fakeRender = makeFakeRender()
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: fakeRender })
     fs.writeFileSync(path.join(repoRoot, 'generated', RUN_ID, 'brief.json'), 'not json at all')
     const progress: string[] = []
     const result = await generateProject({
-      brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f),
+      brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: fakeRender,
       onProgress: (e) => progress.push(`${e.stage}:${e.status}`),
     })
     expect(result.runId).toBe(RUN_ID)
     expect([f.story.calls, f.tts.calls, f.visual.calls]).toEqual([1, 2, 1]) // zero-call resume still holds
     expect(progress.filter((p) => p.endsWith(':skip'))).toEqual([
-      'story:skip', 'voice:skip', 'timeline:skip', 'visual:skip', 'compile:skip', 'renderProps:skip',
+      'story:skip', 'voice:skip', 'timeline:skip', 'visual:skip', 'compile:skip', 'renderProps:skip', 'render:skip',
     ])
     const healed = JSON.parse(fs.readFileSync(path.join(repoRoot, 'generated', RUN_ID, 'brief.json'), 'utf8'))
     expect(healed).toMatchObject({ runId: RUN_ID, payload: BRIEF, sourceHash: expect.any(String) })
@@ -299,5 +315,39 @@ describe('generateProject — failure semantics', () => {
     expect(manifest.stages.timeline.error).toContain('RETIME_DUPLICATE_SEGMENT')
     expect(manifest.stages.voice.status).toBe('done') // upstream stages untouched
     expect(manifest.stages.visual.status).toBe('pending') // downstream stages never ran
+  })
+})
+
+describe('generateProject — render stage + stale video (spec §9.2)', () => {
+  it('renders once, skips a fresh resume, re-renders when render-props.sourceHash moves', async () => {
+    const f = fakes()
+    const renders: string[] = []
+    const fakeRender = vi.fn(async (o: { runDir: string }) => {
+      renders.push(o.runDir)
+      fs.writeFileSync(path.join(o.runDir, 'video.mp4'), 'mp4')
+      return { videoPath: path.join(o.runDir, 'video.mp4') }
+    })
+
+    const first = await generateProject({
+      brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: fakeRender,
+    })
+    expect(first.videoPath).toBe(path.join(repoRoot, 'generated', RUN_ID, 'video.mp4'))
+    expect(fakeRender).toHaveBeenCalledTimes(1)
+    const manifest = JSON.parse(fs.readFileSync(path.join(repoRoot, 'generated', RUN_ID, 'manifest.json'), 'utf8'))
+    const propsDoc = JSON.parse(fs.readFileSync(path.join(repoRoot, 'generated', RUN_ID, 'render-props.json'), 'utf8'))
+    expect(manifest.render).toEqual({ sourceHash: propsDoc.sourceHash, output: 'video.mp4' })
+
+    // fresh resume: video valid → render skipped, zero new upstream calls
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: fakeRender })
+    expect(fakeRender).toHaveBeenCalledTimes(1)                     // NOT called again
+    expect([f.story.calls, f.tts.calls, f.visual.calls]).toEqual([1, 2, 1])
+
+    // STALE: manifest.render.sourceHash no longer matches the current render-props
+    const manifestPath = path.join(repoRoot, 'generated', RUN_ID, 'manifest.json')
+    const stale = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    stale.render.sourceHash = 'stale-hash-not-the-props-hash'
+    fs.writeFileSync(manifestPath, JSON.stringify(stale))
+    await generateProject({ brief: BRIEF, runId: RUN_ID, repoRoot, adapters: adaptersOf(f), renderVideo: fakeRender })
+    expect(fakeRender).toHaveBeenCalledTimes(2)                     // re-rendered (Review Focus 6)
   })
 })
