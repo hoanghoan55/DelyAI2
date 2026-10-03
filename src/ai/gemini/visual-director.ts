@@ -84,6 +84,32 @@ export function createGeminiVisualDirector(deps: {
             throw new RetryableValidationError('Scene DSL failed Zod validation', zodDiagnostics, raw)
           }
 
+          // R21: an empty or partial scene list must not pass vacuously
+          // (`[]` parses and diagnoses clean). The returned sceneId set must
+          // exactly cover the locked windows — missing AND unexpected ids fail
+          // the attempt, named so the retry prompt tells the model what to fix.
+          const expectedIds = Object.keys(input.sceneWindows)
+          const returnedIds = scenes.map((s) => s.sceneId)
+          const missing = expectedIds.filter((id) => !returnedIds.includes(id))
+          const unexpected = [...new Set(returnedIds.filter((id) => !expectedIds.includes(id)))]
+          if (missing.length > 0 || unexpected.length > 0) {
+            const coverage: Diagnostic[] = [
+              ...missing.map((id) => ({
+                severity: 'error' as const,
+                code: 'VISUAL_INVALID' as const,
+                sceneId: id,
+                message: `missing scene "${id}" — one output scene is required per locked window`,
+              })),
+              ...unexpected.map((id) => ({
+                severity: 'error' as const,
+                code: 'VISUAL_INVALID' as const,
+                sceneId: id,
+                message: `unexpected scene "${id}" — no locked window has this id`,
+              })),
+            ]
+            throw new RetryableValidationError('Scene coverage does not match the locked windows', coverage, raw)
+          }
+
           const compileDiagnostics = deps.diagnose(scenes).filter((d) => d.severity === 'error')
           if (compileDiagnostics.length > 0) {
             throw new RetryableValidationError('Scene DSL failed compilation diagnostics', compileDiagnostics, raw)

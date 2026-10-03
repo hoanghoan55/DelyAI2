@@ -21,7 +21,7 @@ const input = (): VisualDirectorInput => ({
   assets: [],
   timelineWindow: { startSeconds: 0, durationSeconds: 6 },
   constraints: {},
-  sceneWindows: { 'scene-001': { startFrame: 0, durationInFrames: 180 } },
+  sceneWindows: { 'scene-hero': { startFrame: 0, durationInFrames: 180 } }, // keyed by GOOD_SCENE.sceneId — R21 coverage: output ids must exactly cover the locked windows
   fps: 30,
 })
 
@@ -105,5 +105,25 @@ describe('createGeminiVisualDirector', () => {
     expect(VISUAL_RESPONSE_SCHEMA.type).toBe('object')
     expect((VISUAL_RESPONSE_SCHEMA.properties as { scenes: { type: string } }).scenes.type).toBe('array')
     expect(VISUAL_RESPONSE_SCHEMA.additionalProperties).toBe(false)
+  })
+
+  it('rejects an empty scene list and retries with the missing scene id (R21)', async () => {
+    const fetchImpl = geminiReturning([[], [GOOD_SCENE]])
+    const director = createGeminiVisualDirector({ diagnose: () => [], apiKey: 'test-key', fetchImpl })
+    const scenes = await director.direct(input())
+    expect(scenes).toEqual([GOOD_SCENE])
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    const retryBody = String(fetchImpl.mock.calls[1]![1]!.body)
+    expect(retryBody).toContain('VISUAL_INVALID')
+    expect(retryBody).toContain('scene-hero')
+  })
+
+  it('accepts the production object envelope { scenes: [...] }', async () => {
+    const fetchImpl = geminiReturning([{ scenes: [GOOD_SCENE] }])
+    const diagnose = vi.fn(() => [] as Diagnostic[])
+    const director = createGeminiVisualDirector({ diagnose, apiKey: 'test-key', fetchImpl })
+    const scenes = await director.direct(input())
+    expect(scenes).toEqual([GOOD_SCENE])
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
   })
 })
