@@ -96,8 +96,9 @@ describe('read/write', () => {
 describe('stage validators (spec §7.4)', () => {
   it('story: valid payload + chain → ok; garbage payload → not ok; wrong chain → not ok', () => {
     const m = manifest()
-    m.stages.story.stageInputs = { promptVersion: 'story-prompt-1' }
-    const h = stageSourceHash({ upstream: briefHash(BRIEF), stageInputs: m.stages.story.stageInputs, payload: STORY })
+    const storyInputs = { promptVersion: 'story-prompt-1' }
+    m.stages.story.stageInputs = storyInputs
+    const h = stageSourceHash({ upstream: briefHash(BRIEF), stageInputs: storyInputs, payload: STORY })
     m.stages.story.sourceHash = h
     writeJsonArtifact(path.join(runDir, 'story.json'), { schemaVersion: 'story-1', runId: 'run-1', sourceHash: h }, STORY)
     expect(validateStory(runDir, briefHash(BRIEF), m)).toEqual({ ok: true, sourceHash: h })
@@ -105,8 +106,13 @@ describe('stage validators (spec §7.4)', () => {
     fs.writeFileSync(path.join(runDir, 'story.json'), '{"schemaVersion":"x","runId":"y","createdAt":"z","sourceHash":"abc","payload":{"nope":1}}')
     expect(validateStory(runDir, briefHash(BRIEF), m).ok).toBe(false) // sourceHash no longer covers this payload → chain mismatch
 
-    writeJsonArtifact(path.join(runDir, 'story.json'), { schemaVersion: 'story-1', runId: 'run-1', sourceHash: h }, { title: 'T', scenes: [] })
-    expect(validateStory(runDir, briefHash(BRIEF), m).ok).toBe(false) // payload edited after hashing → chain mismatch (StoryPlanSchema is the second net)
+    // R24: recompute header + manifest hash FOR the invalid payload so the chain passes —
+    // only StoryPlanSchema can reject (scenes: [] violates min(1)).
+    const badStory = { title: 'T', scenes: [] }
+    const hBadStory = stageSourceHash({ upstream: briefHash(BRIEF), stageInputs: storyInputs, payload: badStory })
+    m.stages.story.sourceHash = hBadStory
+    writeJsonArtifact(path.join(runDir, 'story.json'), { schemaVersion: 'story-1', runId: 'run-1', sourceHash: hBadStory }, badStory)
+    expect(validateStory(runDir, briefHash(BRIEF), m).ok).toBe(false) // chain passes → StoryPlanSchema rejects payload (scenes min(1))
   })
 
   it('voice: requires timeline shape AND every referenced mp3 present non-empty', () => {
@@ -134,27 +140,37 @@ describe('stage validators (spec §7.4)', () => {
     const m = manifest()
     const project = buildFixtureProject()
     const good = project.timeline
-    m.stages.timeline.stageInputs = { paddingSeconds: 0.5, fps: good.fps, width: good.width, height: good.height, voiceScenePolicy: 'strict' }
-    const h = stageSourceHash({ upstream: UPSTREAM, stageInputs: m.stages.timeline.stageInputs, payload: good })
+    const timelineInputs = { paddingSeconds: 0.5, fps: good.fps, width: good.width, height: good.height, voiceScenePolicy: 'strict' }
+    m.stages.timeline.stageInputs = timelineInputs
+    const h = stageSourceHash({ upstream: UPSTREAM, stageInputs: timelineInputs, payload: good })
     m.stages.timeline.sourceHash = h
     writeJsonArtifact(path.join(runDir, 'master-timeline.json'), { schemaVersion: 'master-1', runId: 'run-1', sourceHash: h }, good)
     expect(validateTimeline(runDir, UPSTREAM, m).ok).toBe(true)
 
+    // R24: chain passes (header + manifest recomputed over the broken payload) —
+    // only the Σ durationInFrames === totalFrames check can reject.
     const broken = { ...good, totalFrames: good.totalFrames + 1 }
-    writeJsonArtifact(path.join(runDir, 'master-timeline.json'), { schemaVersion: 'master-1', runId: 'run-1', sourceHash: h }, broken)
+    const hBadTl = stageSourceHash({ upstream: UPSTREAM, stageInputs: timelineInputs, payload: broken })
+    m.stages.timeline.sourceHash = hBadTl
+    writeJsonArtifact(path.join(runDir, 'master-timeline.json'), { schemaVersion: 'master-1', runId: 'run-1', sourceHash: hBadTl }, broken)
     expect(validateTimeline(runDir, UPSTREAM, m).ok).toBe(false)
   })
 
   it('visual: parseProjectDsl strict acceptance', () => {
     const m = manifest()
-    m.stages.visual.stageInputs = { promptVersion: 'visual-prompt-1', seed: demoProjectDsl.seed, style: demoProjectDsl.style, catalogue: { compositions: ['hero'], visual: [], motion: [] } }
-    const h = stageSourceHash({ upstream: UPSTREAM, stageInputs: m.stages.visual.stageInputs, payload: demoProjectDsl })
+    const visualInputs = { promptVersion: 'visual-prompt-1', seed: demoProjectDsl.seed, style: demoProjectDsl.style, catalogue: { compositions: ['hero'], visual: [], motion: [] } }
+    m.stages.visual.stageInputs = visualInputs
+    const h = stageSourceHash({ upstream: UPSTREAM, stageInputs: visualInputs, payload: demoProjectDsl })
     m.stages.visual.sourceHash = h
     writeJsonArtifact(path.join(runDir, 'project.dsl.json'), { schemaVersion: 'dsl-1', runId: 'run-1', sourceHash: h }, demoProjectDsl)
     expect(validateVisual(runDir, UPSTREAM, m).ok).toBe(true)
 
-    const bad = { ...demoProjectDsl, scenes: [] } // min(1) violated
-    writeJsonArtifact(path.join(runDir, 'project.dsl.json'), { schemaVersion: 'dsl-1', runId: 'run-1', sourceHash: h }, bad)
+    // R24: chain passes (header + manifest recomputed over the invalid payload) —
+    // only strict parseProjectDsl can reject (scenes: [] violates min(1)).
+    const bad = { ...demoProjectDsl, scenes: [] }
+    const hBadDsl = stageSourceHash({ upstream: UPSTREAM, stageInputs: visualInputs, payload: bad })
+    m.stages.visual.sourceHash = hBadDsl
+    writeJsonArtifact(path.join(runDir, 'project.dsl.json'), { schemaVersion: 'dsl-1', runId: 'run-1', sourceHash: hBadDsl }, bad)
     expect(validateVisual(runDir, UPSTREAM, m).ok).toBe(false)
   })
 
