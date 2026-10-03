@@ -4,6 +4,7 @@ export type { AssetDirector, AssetPlan, AssetPlanningInput } from './assets/cont
 export type { TtsAdapter, TtsInput } from './tts/contract'
 
 export { createFixtureStoryDirector, FIXTURE_STORY } from './story/fixture'
+export { createGeminiStoryDirector } from './gemini/story-director'
 export { createFixtureVisualDirector, FIXTURE_SCENES } from './visual/fixture'
 export { createFixtureAssetDirector } from './assets/fixture'
 export { createFixtureTtsAdapter } from './tts/fixture'
