@@ -40,10 +40,59 @@ describe('demo composition source', () => {
   // Hard requirement 1: the composition renders the real built project, passed
   // through by reference (no clone/map), not a placeholder.
   it('DemoComposition passes the built project through to ProjectVideo by reference', () => {
-    const el = DemoComposition({}) as unknown as { props: { scenes: unknown; timeline: unknown } }
+    const el = DemoComposition({
+      scenes: demoProject.compiledScenes,
+      timeline: demoProject.timeline,
+      voice: null,
+    }) as unknown as { props: { scenes: unknown; timeline: unknown } }
     const props = el.props
     expect(props.scenes).toBe(demoProject.compiledScenes)
     expect(props.timeline).toBe(demoProject.timeline)
+  })
+
+  it('Root defaultProps carry the fixture project by reference (voice null until a --props run)', () => {
+    const el = RemotionRoot({}) as unknown as { props: { defaultProps: { scenes: unknown; timeline: unknown; voice: unknown } } }
+    expect(el.props.defaultProps.scenes).toBe(demoProject.compiledScenes)
+    expect(el.props.defaultProps.timeline).toBe(demoProject.timeline)
+    expect(el.props.defaultProps.voice).toBeNull()
+  })
+
+  it('calculateMetadata re-derives all four fields from props.timeline (spec §8 props-driven)', () => {
+    const el = RemotionRoot({}) as unknown as { props: { calculateMetadata: (input: { props: { timeline: unknown } }) => { durationInFrames: number; fps: number; width: number; height: number } } }
+    const generated = { ...demoProject.timeline, totalFrames: 137, fps: 24, width: 640, height: 360 }
+    const meta = el.props.calculateMetadata({ props: { timeline: generated } })
+    expect(meta).toEqual({ durationInFrames: 137, fps: 24, width: 640, height: 360 })
+  })
+
+  it('DemoComposition forwards props to ProjectVideo and binds the staticFile adapter', () => {
+    const el = DemoComposition({
+      scenes: demoProject.compiledScenes,
+      timeline: demoProject.timeline,
+      voice: null,
+    }) as unknown as { props: { scenes: unknown; timeline: unknown; resolveAudioSrc: (p: string) => string } }
+    expect(el.props.scenes).toBe(demoProject.compiledScenes)
+    expect(el.props.timeline).toBe(demoProject.timeline)
+    expect(el.props.resolveAudioSrc('generated/x/voice/a.mp3')).toBe('/generated/x/voice/a.mp3')
+  })
+
+  // R1: a real --props run hands Remotion the NESTED render-props artifact
+  // ({ header…, payload: { scenes, timeline, voice, audioSrcBySceneId } }).
+  // The render side unwraps `payload` before reading; flat props (no payload
+  // key) fall through unchanged. Unit-level proof; T14's e2e renders it.
+  it('DemoComposition unwraps nested payload props and forwards the INNER scenes/timeline by reference', () => {
+    const el = DemoComposition({
+      payload: { scenes: demoProject.compiledScenes, timeline: demoProject.timeline, voice: null },
+    } as never) as unknown as { props: { scenes: unknown; timeline: unknown; voice: unknown } }
+    expect(el.props.scenes).toBe(demoProject.compiledScenes)
+    expect(el.props.timeline).toBe(demoProject.timeline)
+    expect(el.props.voice).toBeNull()
+  })
+
+  it('calculateMetadata unwraps nested payload props and derives from the INNER timeline', () => {
+    const el = RemotionRoot({}) as unknown as { props: { calculateMetadata: (input: { props: unknown }) => { durationInFrames: number; fps: number; width: number; height: number } } }
+    const generated = { ...demoProject.timeline, totalFrames: 137, fps: 24, width: 640, height: 360 }
+    const meta = el.props.calculateMetadata({ props: { payload: { timeline: generated } } } as never)
+    expect(meta).toEqual({ durationInFrames: 137, fps: 24, width: 640, height: 360 })
   })
 
   // Carry-forward (Task 12 review Minor-1, binding on Task 15): the inspection
