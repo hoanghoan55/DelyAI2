@@ -50,8 +50,11 @@ export function buildVisualPrompt(input: VisualDirectorInput): string {
   const scenes = input.scenes
     .map((s) => `- ${s.id} | purpose=${s.purpose} | duration=${s.durationSeconds}s | title=${s.title} | narration=${s.narration}`).join('\n')
   const compositions = input.availableCompositions.join(', ')
-  const visualRecipes = input.availableVisualRecipes.map((r) => `${r.id}@${r.version}`).join(', ')
-  const motionRecipes = input.availableMotionRecipes.map((r) => `${r.id}@${r.version}`).join(', ')
+  // Registry keys are bare ids and the compiler matches exactly — listing
+  // `${id}@${version}` made the model emit suffixed ids that always failed
+  // (live run 7: UNKNOWN_VISUAL_RECIPE on real recipes).
+  const visualRecipes = input.availableVisualRecipes.map((r) => r.id).join(', ')
+  const motionRecipes = input.availableMotionRecipes.map((r) => r.id).join(', ')
   const styles = STYLE_PRESETS.map((p) => `${p.id}: ${p.description}`).join('; ')
   const assets = input.assets.map((a) => `- ${a.id} (${a.kind}): ${a.source}`).join('\n')
   return [

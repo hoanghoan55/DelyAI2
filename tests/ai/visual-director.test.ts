@@ -127,6 +127,14 @@ describe('createGeminiVisualDirector', () => {
     expect(prompt).toContain('never a bare string')
   })
 
+  it('prompt lists recipe ids bare — registry keys carry no @version (run 7: UNKNOWN_VISUAL_RECIPE on every suffixed id)', () => {
+    const prompt = buildVisualPrompt(input())
+    expect(prompt).toContain('Available visual recipes: grid')
+    expect(prompt).toContain('Available motion recipes: drift')
+    expect(prompt).not.toContain('grid@')
+    expect(prompt).not.toContain('drift@')
+  })
+
   it('rejects an empty scene list and retries with the missing scene id (R21)', async () => {
     const fetchImpl = geminiReturning([[], [GOOD_SCENE]])
     const director = createGeminiVisualDirector({ diagnose: () => [], apiKey: 'test-key', fetchImpl })
