@@ -1,7 +1,7 @@
 import { secondsToFrames } from '@/timeline/convert'
 import type { Diagnostic } from '@/timeline/diagnostics'
 import type { MasterTimeline } from '@/timeline/master'
-import { hasComposition, hasMotion, hasVisual, resolveComposition, resolveMotion, resolveVisual } from '@/video-engine/registry'
+import { hasComposition, hasMotion, hasVisual, listAvailable, resolveComposition, resolveMotion, resolveVisual } from '@/video-engine/registry'
 import { ENGINE_VERSION, IR_VERSION } from '@/video-engine/version'
 import { computeCompiledHash } from '@/video-engine/ir/hash'
 import type { AssetRef, CompiledAudioCue, CompiledEvent, CompiledLayer, CompiledScene, CompiledTypography } from '@/video-engine/ir/types'
@@ -32,17 +32,24 @@ export function compileScene(input: CompileSceneInput): CompiledScene {
   const diagnostics: Diagnostic[] = []
 
   // 1. Semantic validation — known composition / recipes.
+  // AI-facing diagnostics name the valid ids so a corrective retry can
+  // self-correct (mirror of the registry's resolve* messages).
+  const available = listAvailable()
+  const knownIds = (rows: { id: string }[]) => rows.map((r) => r.id).join(', ') || '(none)'
   if (!hasComposition(dsl.composition)) {
-    throw new CompilerError(`Unknown composition "${dsl.composition}"`, [err('UNKNOWN_COMPOSITION', `Unknown composition "${dsl.composition}".`, dsl.sceneId)])
+    const message = `Unknown composition "${dsl.composition}". Known: ${knownIds(available.composition)}`
+    throw new CompilerError(message, [err('UNKNOWN_COMPOSITION', message, dsl.sceneId)])
   }
   for (const v of dsl.visual) {
     if (!hasVisual(v.recipe)) {
-      throw new CompilerError(`Unknown visual recipe "${v.recipe}"`, [err('UNKNOWN_VISUAL_RECIPE', `Unknown visual recipe "${v.recipe}".`, dsl.sceneId)])
+      const message = `Unknown visual recipe "${v.recipe}". Known: ${knownIds(available.visual)}`
+      throw new CompilerError(message, [err('UNKNOWN_VISUAL_RECIPE', message, dsl.sceneId)])
     }
   }
   for (const m of dsl.motion) {
     if (!hasMotion(m.recipe)) {
-      throw new CompilerError(`Unknown motion recipe "${m.recipe}"`, [err('UNKNOWN_MOTION_RECIPE', `Unknown motion recipe "${m.recipe}".`, dsl.sceneId)])
+      const message = `Unknown motion recipe "${m.recipe}". Known: ${knownIds(available.motion)}`
+      throw new CompilerError(message, [err('UNKNOWN_MOTION_RECIPE', message, dsl.sceneId)])
     }
   }
 

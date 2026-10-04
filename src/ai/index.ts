@@ -4,6 +4,12 @@ export type { AssetDirector, AssetPlan, AssetPlanningInput } from './assets/cont
 export type { TtsAdapter, TtsInput } from './tts/contract'
 
 export { createFixtureStoryDirector, FIXTURE_STORY } from './story/fixture'
+export { createGeminiStoryDirector } from './gemini/story-director'
 export { createFixtureVisualDirector, FIXTURE_SCENES } from './visual/fixture'
+export { createGeminiVisualDirector } from './gemini/visual-director'
 export { createFixtureAssetDirector } from './assets/fixture'
 export { createFixtureTtsAdapter } from './tts/fixture'
+export { generateProject, StageError } from './generate'
+export type { GenerateOptions, GenerateResult, GenerateProgress, GenerateStage } from './generate'
+export { renderVideo } from './render'
+export type { RenderVideoOptions } from './render'

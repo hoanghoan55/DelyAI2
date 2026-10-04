@@ -109,6 +109,21 @@ describe('compileScene — diagnostics for unknown ids (Review Focus #2)', () =>
     try { compileScene({ dsl: { ...dsl, composition: 'nope' }, timeline: timelineFor(6) }) } catch (e) { caught = e }
     expect(caught).toBeInstanceOf(CompilerError)
   })
+
+  it('UNKNOWN_VISUAL_RECIPE message lists Known ids so the AI retry can self-correct (run 7)', () => {
+    const e = captureError(() => compileScene({ dsl: { ...dsl, visual: [{ recipe: 'missing', params: {} }] }, timeline: timelineFor(6) }))
+    const d = e.diagnostics.find((x) => x.code === 'UNKNOWN_VISUAL_RECIPE')!
+    expect(d.message).toContain('missing')
+    expect(d.message).toContain('Known:')
+    expect(d.message).toContain('particle-field')
+  })
+
+  it('UNKNOWN_MOTION_RECIPE and UNKNOWN_COMPOSITION messages list Known ids too', () => {
+    const m = captureError(() => compileScene({ dsl: { ...dsl, motion: [{ recipe: 'missing', params: {} }] }, timeline: timelineFor(6) }))
+    expect(m.diagnostics.find((x) => x.code === 'UNKNOWN_MOTION_RECIPE')!.message).toMatch(/Known:.*\bfade\b/)
+    const c = captureError(() => compileScene({ dsl: { ...dsl, composition: 'nope' }, timeline: timelineFor(6) }))
+    expect(c.diagnostics.find((x) => x.code === 'UNKNOWN_COMPOSITION')!.message).toMatch(/Known:.*\bsplit\b/)
+  })
 })
 
 describe('compileScene — frames are always integers (Review Focus #1 & hard requirement #4)', () => {

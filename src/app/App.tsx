@@ -1,6 +1,7 @@
 import React from 'react'
 import type { FixtureProject } from '@/ai/project'
 import { ProjectPlayer } from './ProjectPlayer'
+import { GeneratePanel } from './GeneratePanel'
 
 /**
  * Pure function of its props: it never builds the project itself. The entry
@@ -14,5 +15,6 @@ export const App: React.FC<{ project: FixtureProject }> = ({ project }) => (
       {project.compiledScenes.length} scenes · {project.timeline.totalFrames} frames @ {project.timeline.fps}fps
     </p>
     <ProjectPlayer compiledScenes={project.compiledScenes} timeline={project.timeline} />
+    <GeneratePanel />
   </main>
 )

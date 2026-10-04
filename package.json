@@ -13,7 +13,8 @@
     "build": "vite build",
     "bundle:remotion": "remotion bundle remotion/index.ts",
     "render:demo": "remotion render remotion/index.ts DeLyDemo out/demo.mp4",
-    "render:stills": "remotion still remotion/index.ts DeLyDemo out/still-450.png --frame=450 && remotion still remotion/index.ts DeLyDemo out/still-451.png --frame=451"
+    "render:stills": "remotion still remotion/index.ts DeLyDemo out/still-450.png --frame=450 && remotion still remotion/index.ts DeLyDemo out/still-451.png --frame=451",
+    "generate:1a": "node --env-file-if-exists=.env --import tsx scripts/generate-1a.ts"
   },
   "dependencies": {
     "@react-three/fiber": "8.17.10",
@@ -33,6 +34,7 @@
     "@types/three": "0.169.0",
     "@vitejs/plugin-react": "4.3.3",
     "eslint": "9.13.0",
+    "tsx": "^4.23.15",
     "typescript": "5.6.3",
     "typescript-eslint": "8.12.2",
     "vite": "5.4.10",
