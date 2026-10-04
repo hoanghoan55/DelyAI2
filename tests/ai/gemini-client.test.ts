@@ -5,6 +5,8 @@ const SCHEMA = { type: 'object', properties: { title: { type: 'string' } }, requ
 
 describe('geminiGenerateJson', () => {
   it('POSTs v1beta generateContent with x-goog-api-key and JSON schema, parses candidate text', async () => {
+    const prevModel = process.env.GEMINI_MODEL
+    delete process.env.GEMINI_MODEL // default-URL assertion must not depend on ambient .env (GEMINI_MODEL override)
     // R8: mock declares the real fetch signature; `input` is read back via mock.calls below.
     const fetchImpl = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toContain(':generateContent')
@@ -25,6 +27,7 @@ describe('geminiGenerateJson', () => {
     expect(body.generationConfig).toEqual({ responseMimeType: 'application/json', responseSchema: SCHEMA })
     expect(JSON.stringify(body)).not.toContain('temperature') // Gemini 3: no sampling knobs
     expect(JSON.stringify(body)).toContain('hello')
+    if (prevModel !== undefined) process.env.GEMINI_MODEL = prevModel
   })
 
   it('defaults model to gemini-3.8-flash and reads GEMINI_MODEL override', async () => {
