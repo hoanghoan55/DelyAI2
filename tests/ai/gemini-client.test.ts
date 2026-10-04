@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest'
-import { geminiGenerateJson } from '@/ai/gemini/client'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { geminiGenerateJson, resetGeminiKeyRotation } from '@/ai/gemini/client'
 
 const SCHEMA = { type: 'object', properties: { title: { type: 'string' } }, required: ['title'], additionalProperties: false }
 
@@ -43,11 +43,16 @@ describe('geminiGenerateJson', () => {
   })
 
   it('throws when GEMINI_API_KEY is absent', async () => {
+    // env hygiene: setup-env.ts loads .env, so GEMINI_API_KEYS is ambient too —
+    // the pool branch must be absent for this "no key at all" assertion.
     const prev = process.env.GEMINI_API_KEY
+    const prevMulti = process.env.GEMINI_API_KEYS
     delete process.env.GEMINI_API_KEY
+    delete process.env.GEMINI_API_KEYS
     await expect(geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: vi.fn() }))
       .rejects.toThrow(/GEMINI_API_KEY/)
     if (prev !== undefined) process.env.GEMINI_API_KEY = prev
+    if (prevMulti !== undefined) process.env.GEMINI_API_KEYS = prevMulti
   })
 
   it('throws on non-2xx, on empty candidates, and on unparseable text', async () => {
@@ -73,5 +78,87 @@ describe('geminiGenerateJson', () => {
     })
     await expect(geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { ...key, fetchImpl: r3 }))
       .rejects.toThrow(/GEMINI_BAD_JSON/)
+  })
+})
+
+// rotation tests — env vars must be saved/deleted/restored around each test:
+// setup-env.ts loads .env (GEMINI_API_KEY + GEMINI_API_KEYS are ambient now).
+describe('geminiGenerateJson key rotation', () => {
+  // helper: save both env keys, delete both, restore in afterEach (R6 pattern)
+  let saved: { single?: string; multi?: string }
+  beforeEach(() => {
+    saved = { single: process.env.GEMINI_API_KEY, multi: process.env.GEMINI_API_KEYS }
+    delete process.env.GEMINI_API_KEY
+    delete process.env.GEMINI_API_KEYS
+    resetGeminiKeyRotation()
+  })
+  afterEach(() => {
+    if (saved.single !== undefined) process.env.GEMINI_API_KEY = saved.single
+    else delete process.env.GEMINI_API_KEY
+    if (saved.multi !== undefined) process.env.GEMINI_API_KEYS = saved.multi
+    else delete process.env.GEMINI_API_KEYS
+    resetGeminiKeyRotation()
+  })
+
+  // R8: mock declares the real fetch signature so mock.calls types check.
+  // Params are `void`ed (same as Task 5's story mock) rather than asserted.
+  const okFetch = () =>
+    vi.fn(async (_input: RequestInfo | URL, _init?: RequestInit) => {
+      void _input
+      void _init
+      return Response.json({ candidates: [{ content: { parts: [{ text: '{}' }] } }] })
+    })
+  const keyOf = (fetchImpl: ReturnType<typeof vi.fn>, i: number) =>
+    (fetchImpl.mock.calls[i]![1]!.headers as Record<string, string>)['x-goog-api-key']
+
+  it('GEMINI_API_KEYS pool round-robins across consecutive calls', async () => {
+    process.env.GEMINI_API_KEYS = 'k-one, k-two,k-three'
+    const f = okFetch()
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    expect([keyOf(f, 0), keyOf(f, 1), keyOf(f, 2), keyOf(f, 3)]).toEqual(['k-one', 'k-two', 'k-three', 'k-one'])
+    // trims around commas
+  })
+
+  it('pool wins over GEMINI_API_KEY when both are set', async () => {
+    process.env.GEMINI_API_KEY = 'single'
+    process.env.GEMINI_API_KEYS = 'pool-a,pool-b'
+    const f = okFetch()
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    expect(keyOf(f, 0)).toBe('pool-a')
+  })
+
+  it('single GEMINI_API_KEY (no pool) keeps every call on the same key', async () => {
+    process.env.GEMINI_API_KEY = 'only'
+    const f = okFetch()
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    expect([keyOf(f, 0), keyOf(f, 1)]).toEqual(['only', 'only'])
+  })
+
+  it('explicit env.apiKey overrides the pool and leaves the counter untouched', async () => {
+    process.env.GEMINI_API_KEYS = 'pool-a,pool-b'
+    const f = okFetch()
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { apiKey: 'explicit', fetchImpl: f })
+    expect(keyOf(f, 0)).toBe('explicit')
+    // pool branch was not consumed: next env-driven call starts at pool-a
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    expect(keyOf(f, 1)).toBe('pool-a')
+  })
+
+  it('resetGeminiKeyRotation() rewinds the counter', async () => {
+    process.env.GEMINI_API_KEYS = 'a,b'
+    const f = okFetch()
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    resetGeminiKeyRotation()
+    await geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: f })
+    expect([keyOf(f, 0), keyOf(f, 1)]).toEqual(['a', 'a'])
+  })
+
+  it('throws the existing message when neither env key nor injection is present', async () => {
+    await expect(geminiGenerateJson({ prompt: 'p', responseSchema: SCHEMA }, { fetchImpl: vi.fn() }))
+      .rejects.toThrow(/GEMINI_API_KEY is not set/)
   })
 })
