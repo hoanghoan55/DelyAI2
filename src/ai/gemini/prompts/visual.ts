@@ -17,29 +17,27 @@ const SCENE_OBJECT: Record<string, unknown> = {
     duration: { type: 'number' },
     composition: { type: 'string' },
     backdropRenderer: { type: 'string', enum: ['dom', 'canvas2d', 'three'] },
-    visual: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, recipe: { type: 'string' }, params: { type: 'object' }, slot: { type: 'string' } }, required: ['recipe'], additionalProperties: false } },
-    motion: { type: 'array', items: { type: 'object', properties: { recipe: { type: 'string' }, params: { type: 'object' }, target: { type: 'string' } }, required: ['recipe'], additionalProperties: false } },
+    visual: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, recipe: { type: 'string' }, params: { type: 'object' }, slot: { type: 'string' } }, required: ['recipe'] } },
+    motion: { type: 'array', items: { type: 'object', properties: { recipe: { type: 'string' }, params: { type: 'object' }, target: { type: 'string' } }, required: ['recipe'] } },
     // R20: Gemini v1beta responseSchema is an OpenAPI 3.0 subset where `type`
     // is a SINGLE string — the JSON-Schema union `['object', 'null']` is
     // reported to yield 400 INVALID_ARGUMENT (withBoundedRetry would burn all
     // 3 attempts on a request that can never succeed). Nullability is
     // `nullable: true`, matching TypographySpecSchema.nullable() in the Zod
     // authority.
-    typography: { type: 'object', nullable: true, properties: { text: { type: 'string' }, animation: { type: 'string', enum: ['none', 'fade', 'reveal', 'typewriter', 'word-by-word'] }, slot: { type: 'string' }, startSeconds: { type: 'number' }, durationSeconds: { type: 'number' } }, required: ['text', 'animation'], additionalProperties: false },
+    typography: { type: 'object', nullable: true, properties: { text: { type: 'string' }, animation: { type: 'string', enum: ['none', 'fade', 'reveal', 'typewriter', 'word-by-word'] }, slot: { type: 'string' }, startSeconds: { type: 'number' }, durationSeconds: { type: 'number' } }, required: ['text', 'animation'] },
     audio: { type: 'array', items: { type: 'object' } },
     events: { type: 'array', items: { type: 'object' } },
     style: { type: 'object' },
     seed: { type: 'integer' },
   },
   required: ['schemaVersion', 'sceneId', 'purpose', 'duration', 'composition', 'visual', 'motion', 'typography', 'audio', 'events', 'style', 'seed'],
-  additionalProperties: false,
 }
 
 export const VISUAL_RESPONSE_SCHEMA: Record<string, unknown> = {
   type: 'object',
   properties: { scenes: { type: 'array', items: SCENE_OBJECT } },
   required: ['scenes'],
-  additionalProperties: false,
 }
 
 export function buildVisualPrompt(input: VisualDirectorInput): string {

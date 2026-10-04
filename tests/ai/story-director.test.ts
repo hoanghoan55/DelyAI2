@@ -84,4 +84,8 @@ describe('createGeminiStoryDirector', () => {
       expect(purposes).toContain(p)
     }
   })
+
+  it('STORY responseSchema is v1beta-safe: no additionalProperties anywhere (live API 400s on it)', () => {
+    expect(JSON.stringify(STORY_RESPONSE_SCHEMA)).not.toContain('additionalProperties')
+  })
 })

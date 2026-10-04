@@ -101,10 +101,13 @@ describe('createGeminiVisualDirector', () => {
     expect(prompt).toMatch(/never change (the )?(scene )?windows|windows are locked/i)
   })
 
-  it('VISUAL_RESPONSE_SCHEMA requires sceneId/purpose/composition/visual/typography etc. and forbids extra keys', () => {
+  it('VISUAL_RESPONSE_SCHEMA requires sceneId/purpose/composition/visual/typography etc.', () => {
     expect(VISUAL_RESPONSE_SCHEMA.type).toBe('object')
     expect((VISUAL_RESPONSE_SCHEMA.properties as { scenes: { type: string } }).scenes.type).toBe('array')
-    expect(VISUAL_RESPONSE_SCHEMA.additionalProperties).toBe(false)
+  })
+
+  it('VISUAL responseSchema is v1beta-safe: no additionalProperties anywhere (live API 400s on it)', () => {
+    expect(JSON.stringify(VISUAL_RESPONSE_SCHEMA)).not.toContain('additionalProperties')
   })
 
   it('rejects an empty scene list and retries with the missing scene id (R21)', async () => {

@@ -18,12 +18,10 @@ export const STORY_RESPONSE_SCHEMA: Record<string, unknown> = {
           narration: { type: 'string' },
         },
         required: ['id', 'purpose', 'durationSeconds', 'title', 'narration'],
-        additionalProperties: false,
       },
     },
   },
   required: ['title', 'scenes'],
-  additionalProperties: false,
 }
 
 export function buildStoryPrompt(brief: Brief): string {
