@@ -49,7 +49,7 @@ export default defineConfig({
             // `server.config.cwd` does not exist on ResolvedConfig in Vite 5;
             // `envDir` is loadEnv's own directory (defaults to the project root).
             const env = loadEnv(server.config.mode, server.config.envDir, '')
-            for (const key of ['GEMINI_API_KEY', 'GEMINI_MODEL', 'TTS_API_KEY', 'TTS_BASE_URL', 'TTS_VOICE', 'WHISPER_MODEL']) {
+            for (const key of ['GEMINI_API_KEY', 'GEMINI_API_KEYS', 'GEMINI_MODEL', 'TTS_API_KEY', 'TTS_BASE_URL', 'TTS_VOICE', 'WHISPER_MODEL']) {
               if (env[key]) process.env[key] = env[key]
             }
 

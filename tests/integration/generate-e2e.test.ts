@@ -13,7 +13,7 @@ const BRIEF = { topic: 'Giới thiệu kiến trúc DeLyAI2 cho người mới',
 
 const ffprobeJson = (file: string) =>
   JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-show_format', '-of', 'json', file], { encoding: 'utf8' })) as {
-    streams: { codec_type: string; codec_name: string }[]
+    streams: { codec_type: string; codec_name: string; duration?: string }[]
     format: { duration: string }
   }
 
@@ -35,6 +35,8 @@ describe.skipIf(!HAS_CREDS)('Phase 1A end-to-end (spec §1, §9.3) — needs .en
     const types = probe.streams.map((s) => `${s.codec_type}:${s.codec_name}`)
     expect(types).toContain('video:h264')
     expect(types).toContain('audio:aac')                                  // audio actually present (Review Focus 1)
+    const audioStream = probe.streams.find((s) => s.codec_type === 'audio')
+    expect(Number(audioStream?.duration)).toBeGreaterThan(0)                 // aac STREAM duration > 0, not just container (Review Focus 1)
     const expected = result.timeline.totalFrames / result.timeline.fps
     expect(Number(probe.format.duration)).toBeGreaterThan(0)
     expect(Math.abs(Number(probe.format.duration) - expected)).toBeLessThan(1.0)
