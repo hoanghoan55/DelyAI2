@@ -110,6 +110,23 @@ describe('createGeminiVisualDirector', () => {
     expect(JSON.stringify(VISUAL_RESPONSE_SCHEMA)).not.toContain('additionalProperties')
   })
 
+  it('scene style in responseSchema declares the StyleRef shape the Zod union accepts (live: `style: Invalid input`)', () => {
+    const scenes = (VISUAL_RESPONSE_SCHEMA.properties as { scenes: { items: Record<string, unknown> } }).scenes
+    const sceneObj = scenes.items
+    expect((sceneObj.properties as Record<string, unknown>).style).toEqual({
+      type: 'object',
+      properties: { styleId: { type: 'string' } },
+      required: ['styleId'],
+    })
+    expect(sceneObj.required as string[]).toContain('style')
+  })
+
+  it('prompt states the exact style JSON shape the Zod union accepts', () => {
+    const prompt = buildVisualPrompt(input())
+    expect(prompt).toContain('{"styleId":"<one preset id>"}')
+    expect(prompt).toContain('never a bare string')
+  })
+
   it('rejects an empty scene list and retries with the missing scene id (R21)', async () => {
     const fetchImpl = geminiReturning([[], [GOOD_SCENE]])
     const director = createGeminiVisualDirector({ diagnose: () => [], apiKey: 'test-key', fetchImpl })

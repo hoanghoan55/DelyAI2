@@ -28,7 +28,11 @@ const SCENE_OBJECT: Record<string, unknown> = {
     typography: { type: 'object', nullable: true, properties: { text: { type: 'string' }, animation: { type: 'string', enum: ['none', 'fade', 'reveal', 'typewriter', 'word-by-word'] }, slot: { type: 'string' }, startSeconds: { type: 'number' }, durationSeconds: { type: 'number' } }, required: ['text', 'animation'] },
     audio: { type: 'array', items: { type: 'object' } },
     events: { type: 'array', items: { type: 'object' } },
-    style: { type: 'object' },
+    // StyleRef is a strict Zod union ({styleId} | {tokens}); Phase 1A only uses
+    // the styleId branch (spec §2, token consumption is 1B). Without properties
+    // the live model emitted shapes the union always rejected (`style: Invalid
+    // input`, Task 14 run 6) and the retry feedback could not name a fix.
+    style: { type: 'object', properties: { styleId: { type: 'string' } }, required: ['styleId'] },
     seed: { type: 'integer' },
   },
   required: ['schemaVersion', 'sceneId', 'purpose', 'duration', 'composition', 'visual', 'motion', 'typography', 'audio', 'events', 'style', 'seed'],
@@ -70,6 +74,7 @@ export function buildVisualPrompt(input: VisualDirectorInput): string {
     'Rules:',
     '- One output scene per input scene, same sceneId and same duration (seconds) as the window implies.',
     '- Only use ids from the catalogues above; invented ids will be rejected and sent back to you as diagnostics.',
+    '- style MUST be an object of exactly {"styleId":"<one preset id>"} — no other keys, never a bare string, never empty.',
     '- schemaVersion must be "0.1"; seed is a small integer.',
     'Return JSON matching the response schema. Nothing else.',
   ].join('\n')
